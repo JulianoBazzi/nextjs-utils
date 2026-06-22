@@ -1,8 +1,8 @@
 {
   "name": "@julianobazzi/nextjs-utils",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A collection of reusable hooks and utilities for Next.js (App Router), compatible with React 18 and 19.",
-  "author": "Juliano Bazzi <julianobazzi@gmail.com>",
+  "author": "Juliano Bazzi",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.cjs",

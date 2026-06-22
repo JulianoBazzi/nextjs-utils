@@ -14,18 +14,27 @@ export default defineConfig({
   treeshake: true,
   sourcemap: true,
   minify: false,
-  external: ['react', 'react-dom', 'next', 'next/navigation'],
+  external: ['react', 'react-dom', 'next'],
   cjsInterop: true,
-  // esbuild strips module-level `'use client'` while bundling (and re-strips it
-  // from `banner`/`renderChunk`). Prepend it to the written bundles instead, so
-  // the directive survives for Next.js App Router consumers.
+  // Two post-build rewrites on the emitted bundles:
+  // 1. esbuild strips module-level `'use client'` while bundling; prepend it back
+  //    so the directive survives for Next.js App Router consumers.
+  // 2. `next` ships no `exports` field, so native Node ESM (used by `next build`
+  //    page-data collection) can't resolve the extensionless bare specifier
+  //    `next/navigation`. Rewrite it to `next/navigation.js` (the real file),
+  //    resolvable by both native Node ESM and Next's bundler. Source stays
+  //    `next/navigation` so TS types keep resolving via `navigation.d.ts`.
   async onSuccess() {
     await Promise.all(
       CLIENT_BUNDLES.map(async (file) => {
-        const code = await fs.readFile(file, 'utf8');
+        let code = await fs.readFile(file, 'utf8');
+        code = code
+          .replace(/(from\s+['"])next\/navigation(['"])/g, '$1next/navigation.js$2')
+          .replace(/(require\(['"])next\/navigation(['"]\))/g, '$1next/navigation.js$2');
         if (!code.startsWith("'use client'")) {
-          await fs.writeFile(file, `'use client';\n${code}`);
+          code = `'use client';\n${code}`;
         }
+        await fs.writeFile(file, code);
       }),
     );
   },
