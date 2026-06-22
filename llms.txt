@@ -1,0 +1,78 @@
+# @julianobazzi/nextjs-utils
+
+> A collection of reusable hooks and utilities for Next.js (App Router), written
+> in TypeScript. Built for Next.js, compatible with React 18 and 19. Client hooks
+> ship with the `'use client'` directive applied at the bundle entry, so they can be
+> imported directly into Server Components. `next`, `react`, `react-dom` are peer
+> dependencies. Ships as ESM + CJS with TypeScript declarations.
+
+Import everything from the package root:
+`import { useToggle, useSearchParam } from '@julianobazzi/nextjs-utils'`
+
+## Hooks
+
+- useToggle(initialValue = false): [value: boolean, toggle: () => void, set: (value?: boolean) => void]
+  — Boolean state. `toggle()` flips it; `set(v)` assigns a value, `set()` flips.
+
+- usePrevious<T>(value: T): T | undefined
+  — Returns the value held on the previous render; `undefined` on first render.
+
+- useDebounce<T>(value: T, delay = 500): T
+  — Returns a debounced copy of `value` that updates after `delay` ms of stillness.
+
+- useLocalStorage<T>(key: string, initialValue: T): [value: T, setValue: (v: T | ((prev: T) => T)) => void, remove: () => void]
+  — State persisted in localStorage, JSON-serialized, synced across components and
+    tabs via the `storage` event. SSR-safe (returns `initialValue` without `window`).
+
+- useMediaQuery(query: string): boolean
+  — Reactively tracks a CSS media query (e.g. '(min-width: 768px)') via
+    window.matchMedia and useSyncExternalStore. Returns `false` on the server.
+
+- useEventListener(eventName, handler, element?): void
+  — Attaches a typed event listener to window (default), a DOM element, or a ref,
+    with automatic cleanup. The handler is stored in a ref, so it need not be stable.
+
+- useInterval(callback: () => void, delay: number | null): void
+  — Runs `callback` every `delay` ms using the latest callback without resetting
+    the timer. Pass `delay = null` to pause; clears on unmount.
+
+- createCan<T>(useCurrentRoles: () => T | T[] | null | undefined): { useCan, Can }
+  — Auth-agnostic role-based access control factory. `useCan(allowed?: T[]): boolean`
+    and `Can({ allowed?, children, fallback? })` share the resolver. Unauthenticated
+    (resolver -> null/undefined) is denied; empty/omitted `allowed` grants any
+    authenticated user; otherwise granted if any current role is in `allowed`.
+
+## Utilities (non-hook, src/utils/)
+
+- allowNumericKeyDown(event: KeyboardEvent<HTMLInputElement>, options?: { allowDecimal?: boolean; allowNegative?: boolean }): void
+  — onKeyDown handler restricting an input to digits via preventDefault. Control,
+    navigation, and modifier-shortcut keys pass through. Options allow '.'/',' and '-'.
+
+## Next.js utilities (src/next/)
+
+- useSearchParam(key: string, defaultValue?: string): string | null
+  — Typed wrapper around next/navigation's useSearchParams; reads one query param.
+    With a defaultValue returns string; otherwise string | null. Client-only.
+
+- useUpdateQueryParams<T>(options?: { ignoredParams?, history?: 'push'|'replace', scroll? }): (params?: Partial<T>) => void
+  — Writes multiple URL search params from an object. Empty values ('', null,
+    undefined, []) delete the key; arrays append repeated entries; no argument
+    clears all params. Default history 'replace', scroll false. ignoredParams
+    defaults to [] (no app-specific defaults).
+
+- useUpdateSearchParam(options?: { key?='search', history?, scroll? }): (value?: string) => void
+  — Convenience over useUpdateQueryParams for one param. Empty value removes it;
+    a value equal to the current URL value is a no-op.
+
+- useFilterQueryParams<T>({ parameters, deps, search?, setSearch?, initialSearch?, ignoredParams?, overrides? }): { handleSearch }
+  — Syncs a filter form's state to the URL: re-syncs on [deps, search], seeds the
+    search term from initialSearch, returns a handleSearch(value?) setter.
+
+## Notes
+
+- Peer deps: next (>=14), react, react-dom (>=18 <20). The library never bundles them.
+- Targets the App Router; client hooks carry the 'use client' directive.
+- Build: tsup. Lint/format: Biome. Tests: Vitest + Testing Library (jsdom).
+- Source layout: src/hooks/ (React hooks), src/utils/ (pure non-hook helpers), src/next/ (Next-specific).
+- Source: https://github.com/julianobazzi/nextjs-utils
+- Full docs: ./README.md (English) and ./README.pt-br.md (Portuguese).
