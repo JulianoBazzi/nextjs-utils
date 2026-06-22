@@ -1,9 +1,19 @@
 # @julianobazzi/nextjs-utils
 
-> 🇧🇷 [Versão em Português](./README.pt-br.md)
+<a href="https://www.npmjs.com/package/@julianobazzi/nextjs-utils">
+  <img alt="npm version" src="https://img.shields.io/npm/v/@julianobazzi/nextjs-utils?color=01579b&style=for-the-badge&logo=npm">
+</a>
+<a href="https://www.npmjs.com/package/@julianobazzi/nextjs-utils">
+  <img alt="npm downloads" src="https://img.shields.io/npm/dm/@julianobazzi/nextjs-utils?color=01579b&style=for-the-badge">
+</a>
+<a href="https://github.com/JulianoBazzi">
+  <img alt="Author Juliano Bazzi" src="https://img.shields.io/badge/author-Juliano%20Bazzi-%23ffb84d?color=01579b&style=for-the-badge">
+</a>
+<a href="https://github.com/JulianoBazzi/nextjs-utils/blob/master/LICENSE">
+  <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-%2304D361?color=01579b&style=for-the-badge">
+</a>
 
-[![npm version](https://img.shields.io/npm/v/@julianobazzi/nextjs-utils.svg)](https://www.npmjs.com/package/@julianobazzi/nextjs-utils)
-[![license](https://img.shields.io/npm/l/@julianobazzi/nextjs-utils.svg)](./LICENSE)
+**English** | [Português](README.pt-br.md)
 
 A collection of reusable hooks and utilities for **Next.js (App Router)**, written in TypeScript.
 
