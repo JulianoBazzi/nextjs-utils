@@ -6,8 +6,14 @@
 > imported directly into Server Components. `next`, `react`, `react-dom` are peer
 > dependencies. Ships as ESM + CJS with TypeScript declarations.
 
-Import everything from the package root:
-`import { useToggle, useSearchParam } from '@julianobazzi/nextjs-utils'`
+Two entry points:
+- Root `@julianobazzi/nextjs-utils` — core React hooks + utilities (no `next/navigation`).
+- Subpath `@julianobazzi/nextjs-utils/next` — the four `next/navigation`-backed hooks
+  (`useSearchParam`, `useUpdateQueryParams`, `useUpdateSearchParam`, `useFilterQueryParams`).
+Keeping `next/navigation` out of the root entry lets server-evaluated modules (e.g.
+`next build` page-data collection) import core hooks without an `ERR_MODULE_NOT_FOUND`.
+`import { useToggle } from '@julianobazzi/nextjs-utils'`
+`import { useSearchParam } from '@julianobazzi/nextjs-utils/next'`
 
 ## Hooks
 

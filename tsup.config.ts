@@ -1,13 +1,16 @@
 import { promises as fs } from 'node:fs';
 import { defineConfig } from 'tsup';
 
-const CLIENT_BUNDLES = ['dist/index.js', 'dist/index.cjs'];
+const CLIENT_BUNDLES = ['dist/index.js', 'dist/index.cjs', 'dist/next.js', 'dist/next.cjs'];
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  entry: { index: 'src/index.ts', next: 'src/next/index.ts' },
   format: ['esm', 'cjs'],
   dts: true,
   clean: true,
+  // Keep each entry self-contained so `next/navigation` lives only in the
+  // `next` bundle and `'use client'` can be prepended to every emitted file.
+  splitting: false,
   treeshake: true,
   sourcemap: true,
   minify: false,

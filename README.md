@@ -46,6 +46,11 @@ Requires Next.js 14+ (App Router) with React 18 or 19, already installed in your
 | `useEventListener` | Attach a DOM/window event listener with cleanup |
 | `useInterval` | Run a callback on an interval (pausable with `null`) |
 | `createCan` | Build a role-based access control pair (`useCan` + `Can`) |
+
+### Next.js hooks (subpath `@julianobazzi/nextjs-utils/next`)
+
+| Hook | Description |
+| --- | --- |
 | `useSearchParam` | Read a typed query string param (`next/navigation`) |
 | `useUpdateQueryParams` | Write multiple URL search params from an object |
 | `useUpdateSearchParam` | Write a single URL search param |
@@ -172,7 +177,7 @@ Typed wrapper around `next/navigation`'s `useSearchParams` for reading a single
 query param. Client-only — already marked with `'use client'`.
 
 ```tsx
-import { useSearchParam } from '@julianobazzi/nextjs-utils';
+import { useSearchParam } from '@julianobazzi/nextjs-utils/next';
 
 const tab = useSearchParam('tab', 'overview'); // string  (default applied)
 const ref = useSearchParam('ref');             // string | null
@@ -184,7 +189,7 @@ Write URL search params from your filter/search UI. Empty values delete the para
 arrays produce repeated entries. Defaults to `router.replace` without scrolling.
 
 ```tsx
-import { useUpdateQueryParams, useUpdateSearchParam } from '@julianobazzi/nextjs-utils';
+import { useUpdateQueryParams, useUpdateSearchParam } from '@julianobazzi/nextjs-utils/next';
 
 const updateQuery = useUpdateQueryParams();
 updateQuery({ status: 'active', tag: ['a', 'b'], page: undefined }); // ?status=active&tag=a&tag=b
@@ -199,7 +204,7 @@ updateSearch('hello'); // ?search=hello   (no-op if unchanged)
 Keeps a filter form's state in sync with the URL and exposes a `handleSearch` setter.
 
 ```tsx
-import { useFilterQueryParams } from '@julianobazzi/nextjs-utils';
+import { useFilterQueryParams } from '@julianobazzi/nextjs-utils/next';
 
 const [search, setSearch] = useState<string>();
 const { handleSearch } = useFilterQueryParams({
@@ -212,6 +217,11 @@ const { handleSearch } = useFilterQueryParams({
 
 ## Next.js notes
 
+- The four `next/navigation`-backed hooks (`useSearchParam`, `useUpdateQueryParams`,
+  `useUpdateSearchParam`, `useFilterQueryParams`) are exported from the
+  `@julianobazzi/nextjs-utils/next` subpath. The main entry stays free of
+  `next/navigation` so importing core hooks/utilities from a server-evaluated
+  module (e.g. during `next build` page-data collection) never pulls it in.
 - This package targets the **App Router**. Client hooks ship with the `'use client'`
   directive applied at the bundle entry, so importing them into a Server Component
   does not require a wrapper.
