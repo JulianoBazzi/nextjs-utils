@@ -49,4 +49,74 @@ describe('useDebounce', () => {
     act(() => vi.advanceTimersByTime(200));
     expect(result.current).toBe('c');
   });
+
+  describe('function form', () => {
+    it('delays invoking the callback until the delay elapses', () => {
+      const fn = vi.fn();
+      const { result } = renderHook(() => useDebounce(fn, 500));
+
+      act(() => result.current());
+      expect(fn).not.toHaveBeenCalled();
+
+      act(() => vi.advanceTimersByTime(500));
+      expect(fn).toHaveBeenCalledTimes(1);
+    });
+
+    it('forwards arguments to the callback', () => {
+      const fn = vi.fn();
+      const { result } = renderHook(() => useDebounce(fn, 500));
+
+      act(() => result.current('a', 1));
+      act(() => vi.advanceTimersByTime(500));
+      expect(fn).toHaveBeenCalledWith('a', 1);
+    });
+
+    it('only runs the last call on rapid fire', () => {
+      const fn = vi.fn();
+      const { result } = renderHook(() => useDebounce(fn, 500));
+
+      act(() => result.current(1));
+      act(() => vi.advanceTimersByTime(300));
+      act(() => result.current(2));
+      act(() => vi.advanceTimersByTime(300));
+      expect(fn).not.toHaveBeenCalled();
+
+      act(() => vi.advanceTimersByTime(200));
+      expect(fn).toHaveBeenCalledTimes(1);
+      expect(fn).toHaveBeenCalledWith(2);
+    });
+
+    it('keeps a stable identity across rerenders', () => {
+      const { result, rerender } = renderHook(() => useDebounce(() => {}, 500));
+      const first = result.current;
+      rerender();
+      expect(result.current).toBe(first);
+    });
+
+    it('uses the latest callback without resetting the timer', () => {
+      const a = vi.fn();
+      const b = vi.fn();
+      const { result, rerender } = renderHook(({ fn }) => useDebounce(fn, 500), {
+        initialProps: { fn: a },
+      });
+
+      act(() => result.current());
+      rerender({ fn: b });
+      act(() => vi.advanceTimersByTime(500));
+
+      expect(a).not.toHaveBeenCalled();
+      expect(b).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not invoke the callback after unmount', () => {
+      const fn = vi.fn();
+      const { result, unmount } = renderHook(() => useDebounce(fn, 500));
+
+      act(() => result.current());
+      unmount();
+      act(() => vi.advanceTimersByTime(500));
+
+      expect(fn).not.toHaveBeenCalled();
+    });
+  });
 });

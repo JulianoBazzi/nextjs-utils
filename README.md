@@ -40,7 +40,7 @@ Requires Next.js 14+ (App Router) with React 18 or 19, already installed in your
 | --- | --- |
 | `useToggle` | Boolean state with a toggle and explicit setter |
 | `usePrevious` | The value from the previous render |
-| `useDebounce` | A debounced copy of a fast-changing value |
+| `useDebounce` | A debounced copy of a fast-changing value, or a debounced callback |
 | `useLocalStorage` | State persisted in `localStorage`, synced across tabs |
 | `useMediaQuery` | Reactively track a CSS media query (SSR-safe) |
 | `useEventListener` | Attach a DOM/window event listener with cleanup |
@@ -82,7 +82,12 @@ const previousCount = usePrevious(count);
 ```tsx
 import { useDebounce } from '@julianobazzi/nextjs-utils';
 
+// Value form — returns the value after it stops changing
 const debouncedSearch = useDebounce(search, 300);
+
+// Function form — returns a stable debounced callback
+const debouncedSave = useDebounce((value: string) => save(value), 300);
+debouncedSave('hello');
 ```
 
 ### `useLocalStorage`

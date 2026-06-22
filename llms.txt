@@ -18,7 +18,10 @@ Import everything from the package root:
   — Returns the value held on the previous render; `undefined` on first render.
 
 - useDebounce<T>(value: T, delay = 500): T
-  — Returns a debounced copy of `value` that updates after `delay` ms of stillness.
+- useDebounce<F extends (...args: any[]) => any>(fn: F, delay = 500): (...args: Parameters<F>) => void
+  — Overloaded. Value form returns a debounced copy of `value` that updates after
+    `delay` ms of stillness. Function form returns a stable debounced callback that
+    runs the latest `fn` after `delay` ms of inactivity (cancelled on unmount).
 
 - useLocalStorage<T>(key: string, initialValue: T): [value: T, setValue: (v: T | ((prev: T) => T)) => void, remove: () => void]
   — State persisted in localStorage, JSON-serialized, synced across components and
