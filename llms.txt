@@ -8,8 +8,9 @@
 
 Two entry points:
 - Root `@julianobazzi/nextjs-utils` — core React hooks + utilities (no `next/navigation`).
-- Subpath `@julianobazzi/nextjs-utils/next` — the four `next/navigation`-backed hooks
-  (`useSearchParam`, `useUpdateQueryParams`, `useUpdateSearchParam`, `useFilterQueryParams`).
+- Subpath `@julianobazzi/nextjs-utils/next` — the `next/navigation`-backed hooks
+  (`useSearchParam`, `useUpdateQueryParams`, `useUpdateSearchParam`, `useFilterQueryParams`,
+  `useActiveRoute`, `usePaginationParams`, `useSortParams`, `useHashParam`).
 Keeping `next/navigation` out of the root entry lets server-evaluated modules (e.g.
 `next build` page-data collection) import core hooks without an `ERR_MODULE_NOT_FOUND`.
 `import { useToggle } from '@julianobazzi/nextjs-utils'`
@@ -29,9 +30,21 @@ Keeping `next/navigation` out of the root entry lets server-evaluated modules (e
     `delay` ms of stillness. Function form returns a stable debounced callback that
     runs the latest `fn` after `delay` ms of inactivity (cancelled on unmount).
 
+- useThrottle<T>(value: T, delay = 500): T
+- useThrottle<F extends (...args: any[]) => any>(fn: F, delay = 500): (...args: Parameters<F>) => void
+  — Overloaded, mirrors useDebounce. Value form updates at most once per `delay` ms,
+    settling on the latest value. Function form invokes on the leading edge, then
+    collapses calls made during the wait into one trailing call with the latest
+    args (cancelled on unmount).
+
 - useLocalStorage<T>(key: string, initialValue: T): [value: T, setValue: (v: T | ((prev: T) => T)) => void, remove: () => void]
   — State persisted in localStorage, JSON-serialized, synced across components and
     tabs via the `storage` event. SSR-safe (returns `initialValue` without `window`).
+
+- useCookie<T = string>(name: string, initialValue: T, options?: { days?, path?='/', sameSite?='lax', secure? }): [value, setValue, remove]
+  — Same API as useLocalStorage, backed by document.cookie (JSON-serialized,
+    URI-encoded), synced across components in the same tab. Session cookie unless
+    `days` is set. SSR-safe; for server-side reads use next/headers cookies().
 
 - useMediaQuery(query: string): boolean
   — Reactively tracks a CSS media query (e.g. '(min-width: 768px)') via
@@ -44,6 +57,34 @@ Keeping `next/navigation` out of the root entry lets server-evaluated modules (e
 - useInterval(callback: () => void, delay: number | null): void
   — Runs `callback` every `delay` ms using the latest callback without resetting
     the timer. Pass `delay = null` to pause; clears on unmount.
+
+- useOnlineStatus(): boolean
+  — Tracks browser connectivity via the online/offline events and
+    useSyncExternalStore. Returns `true` on the server.
+
+- usePageVisibility(): boolean
+  — Tracks document.visibilityState via the visibilitychange event. `true` while
+    the tab is visible; `true` on the server. Useful to pause polling/media.
+
+- useIdle(timeout = 60000): boolean
+  — `true` after `timeout` ms without user activity (mouse, keyboard, wheel,
+    scroll, touch; activity bursts are coalesced). Resets to `false` on activity.
+    Returns `false` on the server.
+
+- useBeforeUnload(enabled: boolean, message?: string): void
+  — Registers a beforeunload confirmation while `enabled` (e.g. unsaved changes).
+    Most browsers show a generic dialog and ignore `message`. Client-side route
+    changes (next/link) do not fire beforeunload.
+
+- useBroadcastChannel<T>(channelName: string, onMessage?: (data: T) => void): { postMessage: (data: T) => void }
+  — Cross-tab messaging via BroadcastChannel. Messages go to other tabs only;
+    the channel closes on unmount; the latest onMessage is always used. No-op
+    on the server and in browsers without BroadcastChannel.
+
+- useHistoryState<T>(initialValue: T, options?: { capacity?=100 }): { state, set, undo, redo, canUndo, canRedo, clear }
+  — State with undo/redo. `set` (value or updater) pushes onto a bounded undo
+    stack and clears redo; setting an identical value (Object.is) records nothing;
+    `clear` drops history keeping the current state.
 
 - createCan<T>(useCurrentRoles: () => T | T[] | null | undefined): { useCan, Can }
   — Auth-agnostic role-based access control factory. `useCan(allowed?: T[]): boolean`
@@ -76,6 +117,25 @@ Keeping `next/navigation` out of the root entry lets server-evaluated modules (e
 - useFilterQueryParams<T>({ parameters, deps, search?, setSearch?, initialSearch?, ignoredParams?, overrides? }): { handleSearch }
   — Syncs a filter form's state to the URL: re-syncs on [deps, search], seeds the
     search term from initialSearch, returns a handleSearch(value?) setter.
+
+- useActiveRoute(href: string, options?: { exact? }): boolean
+  — `true` when the current pathname (usePathname) matches `href`. Matches whole
+    path segments by default ('/settings' is active on '/settings/profile' but not
+    '/settings-old'); root '/' only matches exactly. Ignores query/hash in href.
+
+- usePaginationParams(options?: { pageKey?='page', pageSizeKey?='pageSize', defaultPageSize?=10, history?, scroll? }): { page, pageSize, setPage, setPageSize, reset }
+  — Pagination state in the URL. Defaults stay out of the URL (page 1 and the
+    default page size delete their params); setPageSize resets to page 1; invalid
+    params fall back to defaults.
+
+- useSortParams(options?: { sortKey?='sortBy', orderKey?='order', defaultSort?, defaultOrder?='asc', history?, scroll? }): { sortBy, order, toggleSort, clearSort }
+  — Table sorting state in the URL. toggleSort(column) cycles unsorted ->
+    defaultOrder -> flipped -> unsorted; switching columns restarts at defaultOrder.
+
+- useHashParam(defaultValue?: string): [value: string | undefined, setValue: (value?: string) => void]
+  — Reads/writes the URL '#hash' fragment via useSyncExternalStore on hashchange
+    (URI-encoded). Setter with no value/'' clears the hash without leaving a
+    dangling '#'. Returns defaultValue when the hash is empty; SSR-safe.
 
 ## Notes
 

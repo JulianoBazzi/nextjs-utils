@@ -41,10 +41,18 @@ Requer Next.js 14+ (App Router) com React 18 ou 19 já instalado no projeto.
 | `useToggle` | Estado booleano com toggle e setter explícito |
 | `usePrevious` | O valor do render anterior |
 | `useDebounce` | Cópia com debounce de um valor que muda rápido, ou um callback com debounce |
+| `useThrottle` | Cópia com throttle de um valor que muda rápido, ou um callback com throttle |
 | `useLocalStorage` | Estado persistido no `localStorage`, sincronizado entre abas |
+| `useCookie` | Estado persistido em cookie, sincronizado entre componentes |
 | `useMediaQuery` | Acompanha reativamente uma media query CSS (SSR-safe) |
 | `useEventListener` | Anexa um event listener DOM/window com limpeza automática |
 | `useInterval` | Executa um callback em intervalo (pausável com `null`) |
+| `useOnlineStatus` | Acompanha o status de conexão do navegador (SSR-safe) |
+| `usePageVisibility` | Acompanha se a aba está visível (SSR-safe) |
+| `useIdle` | Detecta quando o usuário fica inativo por um tempo |
+| `useBeforeUnload` | Confirmação antes de sair da página (alterações não salvas) |
+| `useBroadcastChannel` | Envia/recebe mensagens entre abas da mesma origem |
+| `useHistoryState` | Estado com histórico de undo/redo |
 | `createCan` | Cria um par de controle de acesso por papel (`useCan` + `Can`) |
 
 ### Hooks Next.js (subpath `@julianobazzi/nextjs-utils/next`)
@@ -55,6 +63,10 @@ Requer Next.js 14+ (App Router) com React 18 ou 19 já instalado no projeto.
 | `useUpdateQueryParams` | Escreve vários search params da URL a partir de um objeto |
 | `useUpdateSearchParam` | Escreve um único search param da URL |
 | `useFilterQueryParams` | Sincroniza o estado de um form de filtro com a URL |
+| `useActiveRoute` | Se a rota atual corresponde a um link (item de menu ativo) |
+| `usePaginationParams` | Estado de paginação (`page`/`pageSize`) guardado na URL |
+| `useSortParams` | Estado de ordenação de tabela guardado na URL |
+| `useHashParam` | Lê/escreve o fragmento `#hash` da URL (SSR-safe) |
 
 ## Utilitários
 
@@ -133,6 +145,77 @@ const [rodando, setRodando] = useState(true);
 
 // Passe `null` como delay para pausar o intervalo.
 useInterval(() => setCount((c) => c + 1), rodando ? 1000 : null);
+```
+
+### `useThrottle`
+
+```tsx
+import { useThrottle } from '@julianobazzi/nextjs-utils';
+
+// Forma de valor — atualiza no máximo uma vez por intervalo, terminando no valor mais recente
+const scrollComThrottle = useThrottle(scrollY, 200);
+
+// Forma de função — a primeira chamada roda na hora, as extras viram uma só no fim
+const trackComThrottle = useThrottle((position: number) => track(position), 200);
+```
+
+### `useCookie`
+
+Mesma API do `useLocalStorage`, mas persistindo em cookie (JSON serializado).
+
+```tsx
+import { useCookie } from '@julianobazzi/nextjs-utils';
+
+const [consent, setConsent, removeConsent] = useCookie('consent', 'pending', { days: 365 });
+setConsent('accepted');
+```
+
+### `useOnlineStatus` / `usePageVisibility`
+
+```tsx
+import { useOnlineStatus, usePageVisibility } from '@julianobazzi/nextjs-utils';
+
+const isOnline = useOnlineStatus();   // false enquanto o navegador está offline
+const isVisible = usePageVisibility(); // false enquanto a aba está em segundo plano
+```
+
+### `useIdle`
+
+```tsx
+import { useIdle } from '@julianobazzi/nextjs-utils';
+
+const isIdle = useIdle(5 * 60 * 1000); // true após 5 minutos sem atividade
+```
+
+### `useBeforeUnload`
+
+```tsx
+import { useBeforeUnload } from '@julianobazzi/nextjs-utils';
+
+useBeforeUnload(form.isDirty); // navegador confirma antes de fechar/recarregar
+```
+
+### `useBroadcastChannel`
+
+```tsx
+import { useBroadcastChannel } from '@julianobazzi/nextjs-utils';
+
+const { postMessage } = useBroadcastChannel<'logout'>('auth', (message) => {
+  if (message === 'logout') signOut(); // disparado por outras abas
+});
+postMessage('logout'); // avisa todas as outras abas
+```
+
+### `useHistoryState`
+
+```tsx
+import { useHistoryState } from '@julianobazzi/nextjs-utils';
+
+const { state, set, undo, redo, canUndo, canRedo } = useHistoryState('');
+set('rascunho 1');
+set('rascunho 2');
+undo(); // -> 'rascunho 1'
+redo(); // -> 'rascunho 2'
 ```
 
 ### `allowNumericKeyDown` (utilitário)
@@ -216,13 +299,59 @@ const { handleSearch } = useFilterQueryParams({
 });
 ```
 
+### `useActiveRoute` (Next.js)
+
+```tsx
+import { useActiveRoute } from '@julianobazzi/nextjs-utils/next';
+
+const isActive = useActiveRoute('/settings'); // true em /settings e /settings/profile
+const isHome = useActiveRoute('/', { exact: true });
+
+<Link href="/settings" data-active={isActive} />;
+```
+
+### `usePaginationParams` (Next.js)
+
+Estado de paginação na URL, então as páginas são compartilháveis e sobrevivem a
+reloads. Defaults ficam fora da URL (página 1 e o pageSize default removem os params).
+
+```tsx
+import { usePaginationParams } from '@julianobazzi/nextjs-utils/next';
+
+const { page, pageSize, setPage, setPageSize, reset } = usePaginationParams({
+  defaultPageSize: 25,
+});
+setPage(3);      // ?page=3
+setPageSize(50); // ?pageSize=50 (e volta p/ página 1)
+```
+
+### `useSortParams` (Next.js)
+
+```tsx
+import { useSortParams } from '@julianobazzi/nextjs-utils/next';
+
+const { sortBy, order, toggleSort, clearSort } = useSortParams();
+toggleSort('name'); // ?sortBy=name&order=asc -> desc -> limpo
+```
+
+### `useHashParam` (Next.js)
+
+```tsx
+import { useHashParam } from '@julianobazzi/nextjs-utils/next';
+
+const [tab, setTab] = useHashParam('overview');
+setTab('billing'); // -> #billing, sem navegação do Next.js
+setTab();          // limpa o hash
+```
+
 ## Notas Next.js
 
-- Os quatro hooks que usam `next/navigation` (`useSearchParam`, `useUpdateQueryParams`,
-  `useUpdateSearchParam`, `useFilterQueryParams`) são exportados pelo subpath
-  `@julianobazzi/nextjs-utils/next`. O entry principal fica livre de `next/navigation`,
-  então importar hooks/utilitários core de um módulo avaliado no servidor (ex: durante
-  o page-data collection do `next build`) nunca puxa `next/navigation`.
+- Os hooks Next.js (`useSearchParam`, `useUpdateQueryParams`, `useUpdateSearchParam`,
+  `useFilterQueryParams`, `useActiveRoute`, `usePaginationParams`, `useSortParams`,
+  `useHashParam`) são exportados pelo subpath `@julianobazzi/nextjs-utils/next`.
+  O entry principal fica livre de `next/navigation`, então importar hooks/utilitários
+  core de um módulo avaliado no servidor (ex: durante o page-data collection do
+  `next build`) nunca puxa `next/navigation`.
 - O pacote é p/ o **App Router**. Os hooks client já vêm com `'use client'` no entry
   do bundle, então importar em Server Component não exige wrapper.
 - `useSearchParam` lê de `next/navigation`; use dentro do contexto do router do Next

@@ -46,6 +46,19 @@ describe('useUpdateQueryParams', () => {
     expect(mocks.replace).toHaveBeenCalledWith('/items?tag=a&tag=b', { scroll: false });
   });
 
+  it('deletes a param for empty arrays', () => {
+    setUrl('tag=a');
+    const { result } = renderHook(() => useUpdateQueryParams());
+    result.current({ tag: [] });
+    expect(mocks.replace).toHaveBeenCalledWith('/items', { scroll: false });
+  });
+
+  it('skips empty array items', () => {
+    const { result } = renderHook(() => useUpdateQueryParams());
+    result.current({ tag: ['a', '', 'b'] });
+    expect(mocks.replace).toHaveBeenCalledWith('/items?tag=a&tag=b', { scroll: false });
+  });
+
   it('skips ignored params', () => {
     const { result } = renderHook(() =>
       useUpdateQueryParams<QueryParams>({ ignoredParams: ['withCount'] }),

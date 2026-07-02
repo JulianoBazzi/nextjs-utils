@@ -28,4 +28,12 @@ describe('useToggle', () => {
     act(() => result.current[2](true));
     expect(result.current[0]).toBe(true);
   });
+
+  it('toggles when the setter is called without a value', () => {
+    const { result } = renderHook(() => useToggle());
+    act(() => result.current[2]());
+    expect(result.current[0]).toBe(true);
+    act(() => result.current[2]());
+    expect(result.current[0]).toBe(false);
+  });
 });

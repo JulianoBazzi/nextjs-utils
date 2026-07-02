@@ -39,6 +39,47 @@ describe('useLocalStorage', () => {
     expect(window.localStorage.getItem('count')).toBeNull();
   });
 
+  it('re-reads storage for plain local-storage events', () => {
+    const { result } = renderHook(() => useLocalStorage('count', 0));
+    window.localStorage.setItem('count', '7');
+
+    act(() => {
+      window.dispatchEvent(new Event('local-storage'));
+    });
+
+    expect(result.current[0]).toBe(7);
+  });
+
+  it('re-reads storage when a storage event clears every key', () => {
+    window.localStorage.setItem('count', '7');
+    const { result } = renderHook(() => useLocalStorage('count', 0));
+    expect(result.current[0]).toBe(7);
+
+    window.localStorage.clear();
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: null }));
+    });
+
+    expect(result.current[0]).toBe(0);
+  });
+
+  it('ignores storage events for other keys', () => {
+    const { result } = renderHook(() => useLocalStorage('count', 0));
+    window.localStorage.setItem('count', '7');
+
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: 'other' }));
+    });
+
+    expect(result.current[0]).toBe(0);
+  });
+
+  it('falls back to the initial value for malformed stored values', () => {
+    window.localStorage.setItem('count', '{bad');
+    const { result } = renderHook(() => useLocalStorage('count', 0));
+    expect(result.current[0]).toBe(0);
+  });
+
   it('handles object values', () => {
     const { result } = renderHook(() => useLocalStorage('user', { id: 1 }));
     act(() => result.current[1]({ id: 2 }));
