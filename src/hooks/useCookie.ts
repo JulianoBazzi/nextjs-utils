@@ -1,16 +1,31 @@
-import { useCallback, useSyncExternalStore } from 'react';
+import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react';
+import { useIsomorphicLayoutEffect } from './useIsomorphicLayoutEffect';
 import type { SetValue } from './useLocalStorage';
 
-export interface CookieOptions {
+export interface CookieOptions<T = string> {
   /** Expiration in days. Omit for a session cookie. */
   days?: number;
-  /** Cookie path. Default `'/'`. */
+  /** Cookie path. Default `'/'`. Must not contain `;`, `,` or whitespace. */
   path?: string;
+  /** Cookie domain (e.g. `'example.com'`). Omit to scope to the current host. */
+  domain?: string;
   /** SameSite attribute. Default `'lax'`. `'none'` requires `secure: true`. */
   sameSite?: 'lax' | 'strict' | 'none';
   /** Only send the cookie over HTTPS. Default `false`. */
   secure?: boolean;
+  /** Turns a value into the (un-encoded) cookie string. Default `JSON.stringify`. Keep it stable. */
+  serializer?: (value: T) => string;
+  /**
+   * Turns the (decoded) cookie string back into a value. Default `JSON.parse`;
+   * throwing falls back to `initialValue`. Use `(raw) => raw` to read plain
+   * text cookies written by a server.
+   */
+  deserializer?: (raw: string) => T;
 }
+
+const SAME_SITE_VALUES = ['lax', 'strict', 'none'] as const;
+// Hostname (optionally dot-prefixed); excludes attribute separators.
+const DOMAIN_PATTERN = /^\.?[a-z0-9-]+(\.[a-z0-9-]+)*$/i;
 
 function dispatchCookieChange(name: string) {
   // document.cookie writes emit no event; notify listeners in the same tab.
@@ -19,27 +34,61 @@ function dispatchCookieChange(name: string) {
 
 function readCookie(name: string): string | null {
   const prefix = `${encodeURIComponent(name)}=`;
-  const entry = document.cookie.split('; ').find((row) => row.startsWith(prefix));
+  const entry = document.cookie
+    .split(';')
+    .map((row) => row.trim())
+    .find((row) => row.startsWith(prefix));
   return entry === undefined ? null : entry.slice(prefix.length);
 }
 
+function defaultSerializer<T>(value: T): string {
+  return JSON.stringify(value);
+}
+
+function defaultDeserializer<T>(raw: string): T {
+  return JSON.parse(raw) as T;
+}
+
 /**
- * Persist state in a cookie, JSON-serialized and synced across components.
- * SSR-safe: falls back to `initialValue` when `document` is unavailable.
- * Note: reads happen client-side only; for server-side reads use
- * `cookies()` from `next/headers`.
+ * Persist state in a cookie, JSON-serialized and synced across components in
+ * the same tab (cookie writes from other tabs or from the server are not
+ * observed until the next read). SSR-safe: falls back to `initialValue` when
+ * `document` is unavailable; for server-side reads use `cookies()` from
+ * `next/headers`.
+ *
+ * Security: cookies written from JavaScript are never `HttpOnly`, so they are
+ * readable by any script on the page. Do not store session tokens, credentials
+ * or other secrets here — keep those in server-set `HttpOnly` cookies.
  *
  * @param name - the cookie name
- * @param initialValue - value used when the cookie is absent
- * @param options - expiration and cookie attributes
+ * @param initialValue - value used when the cookie is absent or unreadable
+ * @param options - expiration, cookie attributes and (de)serialization
  * @returns `[value, setValue, remove]`
  */
 export function useCookie<T = string>(
   name: string,
   initialValue: T,
-  options: CookieOptions = {},
+  options: CookieOptions<T> = {},
 ): [T, SetValue<T>, () => void] {
-  const { days, path = '/', sameSite = 'lax', secure = false } = options;
+  const {
+    days,
+    path = '/',
+    domain,
+    sameSite = 'lax',
+    secure = false,
+    serializer = defaultSerializer,
+    deserializer = defaultDeserializer,
+  } = options;
+
+  // Latest values, so `setValue`/`remove` stay referentially stable.
+  const initialRef = useRef(initialValue);
+  const serializerRef = useRef(serializer);
+  const deserializerRef = useRef(deserializer);
+  useIsomorphicLayoutEffect(() => {
+    initialRef.current = initialValue;
+    serializerRef.current = serializer;
+    deserializerRef.current = deserializer;
+  });
 
   const subscribe = useCallback(
     (onChange: () => void) => {
@@ -72,11 +121,37 @@ export function useCookie<T = string>(
 
   const raw = useSyncExternalStore(subscribe, getSnapshot, () => null);
 
-  const value: T = raw === null ? initialValue : safeParse(raw, initialValue);
+  const parse = useCallback((stored: string): { value: T } | null => {
+    try {
+      return { value: deserializerRef.current(decodeURIComponent(stored)) };
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Memoized on the raw string so object values keep their identity across
+  // unrelated re-renders (even with an inline `initialValue`).
+  const parsed = useMemo(() => (raw === null ? null : parse(raw)), [raw, parse]);
+  const value: T = parsed === null ? initialValue : parsed.value;
 
   const writeCookie = useCallback(
     (serialized: string, maxAge?: number) => {
+      // Attributes are interpolated raw into the cookie string; refuse values
+      // that could smuggle extra attributes (e.g. `path: '/; domain=evil.com'`).
+      if (/[;,\s]/.test(path)) {
+        throw new Error(`useCookie: invalid path "${path}"`);
+      }
+      if (!SAME_SITE_VALUES.includes(sameSite)) {
+        throw new Error(`useCookie: invalid sameSite "${String(sameSite)}"`);
+      }
+      if (domain !== undefined && !DOMAIN_PATTERN.test(domain)) {
+        throw new Error(`useCookie: invalid domain "${domain}"`);
+      }
+
       let cookie = `${encodeURIComponent(name)}=${serialized}; path=${path}; samesite=${sameSite}`;
+      if (domain !== undefined) {
+        cookie += `; domain=${domain}`;
+      }
       if (maxAge !== undefined) {
         cookie += `; max-age=${maxAge}`;
       }
@@ -87,23 +162,7 @@ export function useCookie<T = string>(
       document.cookie = cookie;
       dispatchCookieChange(name);
     },
-    [name, path, sameSite, secure],
-  );
-
-  const setValue = useCallback<SetValue<T>>(
-    (next) => {
-      if (typeof document === 'undefined') {
-        return;
-      }
-      const stored = readCookie(name);
-      const current = stored === null ? initialValue : safeParse(stored, initialValue);
-      const resolved = next instanceof Function ? next(current) : next;
-      writeCookie(
-        encodeURIComponent(JSON.stringify(resolved)),
-        days === undefined ? undefined : days * 86400,
-      );
-    },
-    [name, initialValue, days, writeCookie],
+    [name, path, domain, sameSite, secure],
   );
 
   const remove = useCallback(() => {
@@ -113,13 +172,27 @@ export function useCookie<T = string>(
     writeCookie('', 0);
   }, [writeCookie]);
 
-  return [value, setValue, remove];
-}
+  const setValue = useCallback<SetValue<T>>(
+    (next) => {
+      if (typeof document === 'undefined') {
+        return;
+      }
+      const stored = readCookie(name);
+      const parsedCurrent = stored === null ? null : parse(stored);
+      const current = parsedCurrent === null ? initialRef.current : parsedCurrent.value;
+      const resolved = next instanceof Function ? next(current) : next;
+      // `JSON.stringify(undefined)` is not a string; treat it as a removal.
+      if (resolved === undefined) {
+        remove();
+        return;
+      }
+      writeCookie(
+        encodeURIComponent(serializerRef.current(resolved)),
+        days === undefined ? undefined : days * 86400,
+      );
+    },
+    [name, days, parse, remove, writeCookie],
+  );
 
-function safeParse<T>(raw: string, fallback: T): T {
-  try {
-    return JSON.parse(decodeURIComponent(raw)) as T;
-  } catch {
-    return fallback;
-  }
+  return [value, setValue, remove];
 }

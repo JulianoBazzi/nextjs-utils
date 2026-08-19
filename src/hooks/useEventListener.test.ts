@@ -89,4 +89,66 @@ describe('useEventListener', () => {
     window.dispatchEvent(new Event('blur'));
     expect(handler).toHaveBeenCalledTimes(1);
   });
+  it('listens on document', () => {
+    const handler = vi.fn();
+    renderHook(() => useEventListener('visibilitychange', handler, document));
+
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('listens on arbitrary event targets', () => {
+    const handler = vi.fn();
+    const target = new EventTarget();
+    renderHook(() => useEventListener('ping', handler, target));
+
+    target.dispatchEvent(new Event('ping'));
+
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards listener options (once)', () => {
+    const handler = vi.fn();
+    renderHook(() => useEventListener('click', handler, undefined, { once: true }));
+
+    window.dispatchEvent(new Event('click'));
+    window.dispatchEvent(new Event('click'));
+
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts the boolean capture form and removes with matching options', () => {
+    const handler = vi.fn();
+    const element = document.createElement('div');
+    const add = vi.spyOn(element, 'addEventListener');
+    const remove = vi.spyOn(element, 'removeEventListener');
+
+    const { unmount } = renderHook(() => useEventListener('click', handler, element, true));
+    expect(add).toHaveBeenCalledWith('click', expect.any(Function), {
+      capture: true,
+      once: undefined,
+      passive: undefined,
+    });
+
+    unmount();
+    expect(remove).toHaveBeenCalledWith('click', expect.any(Function), {
+      capture: true,
+      once: undefined,
+      passive: undefined,
+    });
+  });
+
+  it('does not re-attach for a new inline options object with the same values', () => {
+    const handler = vi.fn();
+    const element = document.createElement('div');
+    const add = vi.spyOn(element, 'addEventListener');
+
+    const { rerender } = renderHook(() =>
+      useEventListener('click', handler, element, { passive: true }),
+    );
+    rerender();
+
+    expect(add).toHaveBeenCalledTimes(1);
+  });
 });

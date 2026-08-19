@@ -7,19 +7,27 @@ type Listener = (event: { data: unknown }) => void;
 class FakeBroadcastChannel {
   static instances = new Set<FakeBroadcastChannel>();
 
-  private listeners = new Set<Listener>();
+  private listeners = new Map<string, Set<Listener>>();
   private closed = false;
 
   constructor(readonly name: string) {
     FakeBroadcastChannel.instances.add(this);
   }
 
-  addEventListener(_type: 'message', listener: Listener) {
-    this.listeners.add(listener);
+  addEventListener(type: string, listener: Listener) {
+    const set = this.listeners.get(type) ?? new Set<Listener>();
+    set.add(listener);
+    this.listeners.set(type, set);
   }
 
-  removeEventListener(_type: 'message', listener: Listener) {
-    this.listeners.delete(listener);
+  removeEventListener(type: string, listener: Listener) {
+    this.listeners.get(type)?.delete(listener);
+  }
+
+  dispatch(type: string, data: unknown) {
+    for (const listener of this.listeners.get(type) ?? []) {
+      listener({ data });
+    }
   }
 
   postMessage(data: unknown) {
@@ -28,9 +36,7 @@ class FakeBroadcastChannel {
       if (instance === this || instance.name !== this.name || instance.closed) {
         continue;
       }
-      for (const listener of instance.listeners) {
-        listener({ data });
-      }
+      instance.dispatch('message', data);
     }
   }
 
@@ -46,6 +52,7 @@ beforeEach(() => {
 
 afterEach(() => {
   FakeBroadcastChannel.instances.clear();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -120,5 +127,71 @@ describe('useBroadcastChannel', () => {
     act(() => sender.result.current.postMessage('hello'));
 
     expect(received).not.toHaveBeenCalled();
+  });
+  it('drops messages rejected by validate', () => {
+    const received = vi.fn();
+    const isString = (data: unknown): data is string => typeof data === 'string';
+    const sender = renderHook(() => useBroadcastChannel<string>('sync'));
+    renderHook(() => useBroadcastChannel<string>('sync', received, { validate: isString }));
+
+    act(() => sender.result.current.postMessage(42 as unknown as string));
+    expect(received).not.toHaveBeenCalled();
+
+    act(() => sender.result.current.postMessage('ok'));
+    expect(received).toHaveBeenCalledWith('ok');
+  });
+
+  it('reports messageerror events through onError', () => {
+    const onError = vi.fn();
+    renderHook(() => useBroadcastChannel<string>('sync', undefined, { onError }));
+
+    const [instance] = FakeBroadcastChannel.instances;
+    act(() => instance?.dispatch('messageerror', 'bad'));
+
+    expect(onError).toHaveBeenCalledWith({ data: 'bad' });
+  });
+
+  it('reports postMessage failures through onError instead of throwing', () => {
+    const error = new Error('DataCloneError');
+    vi.spyOn(FakeBroadcastChannel.prototype, 'postMessage').mockImplementation(() => {
+      throw error;
+    });
+    const onError = vi.fn();
+    const { result } = renderHook(() =>
+      useBroadcastChannel<string>('sync', undefined, { onError }),
+    );
+
+    expect(() => act(() => result.current.postMessage('x'))).not.toThrow();
+    expect(onError).toHaveBeenCalledWith(error);
+
+    const silent = renderHook(() => useBroadcastChannel<string>('sync'));
+    expect(() => act(() => silent.result.current.postMessage('x'))).not.toThrow();
+  });
+
+  it('still posts after unmount through a throwaway channel', () => {
+    const received = vi.fn();
+    renderHook(() => useBroadcastChannel<string>('sync', received));
+    const sender = renderHook(() => useBroadcastChannel<string>('sync'));
+
+    sender.unmount();
+    act(() => sender.result.current.postMessage('late'));
+
+    expect(received).toHaveBeenCalledWith('late');
+    // The temporary channel does not linger.
+    expect(FakeBroadcastChannel.instances.size).toBe(1);
+  });
+
+  it('re-subscribes when the channel name changes', () => {
+    const received = vi.fn();
+    const sender = renderHook(() => useBroadcastChannel<string>('b'));
+    const receiver = renderHook(({ name }) => useBroadcastChannel<string>(name, received), {
+      initialProps: { name: 'a' },
+    });
+
+    receiver.rerender({ name: 'b' });
+    act(() => sender.result.current.postMessage('hello'));
+
+    expect(received).toHaveBeenCalledWith('hello');
+    expect(FakeBroadcastChannel.instances.size).toBe(2);
   });
 });

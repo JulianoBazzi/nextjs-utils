@@ -38,8 +38,10 @@ export function useIdle(timeout = 60_000): boolean {
         return;
       }
       lastReset = now;
-      isIdle = false;
-      setIdle(false);
+      if (isIdle) {
+        isIdle = false;
+        setIdle(false);
+      }
       clearTimeout(timer);
       startTimer();
     };

@@ -3,7 +3,7 @@ export {
   type UseFilterQueryParamsOptions,
   useFilterQueryParams,
 } from './useFilterQueryParams';
-export { useHashParam } from './useHashParam';
+export { type UseHashParamSetOptions, useHashParam } from './useHashParam';
 export {
   type UsePaginationParamsOptions,
   type UsePaginationParamsReturn,

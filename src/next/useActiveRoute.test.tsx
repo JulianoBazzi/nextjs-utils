@@ -60,4 +60,10 @@ describe('useActiveRoute', () => {
     const { result } = renderHook(() => useActiveRoute('/settings/?tab=1#top'));
     expect(result.current).toBe(true);
   });
+  it('never matches an empty, query-only or hash-only href', () => {
+    mocks.pathname = '/settings/profile';
+    expect(renderHook(() => useActiveRoute('')).result.current).toBe(false);
+    expect(renderHook(() => useActiveRoute('#top')).result.current).toBe(false);
+    expect(renderHook(() => useActiveRoute('?tab=1')).result.current).toBe(false);
+  });
 });

@@ -30,6 +30,11 @@ export function useActiveRoute(href: string, options: UseActiveRouteOptions = {}
   const current = normalize(pathname ?? '');
   const target = normalize(href);
 
+  // An empty, query-only or hash-only href has no path to match.
+  if (target === '') {
+    return false;
+  }
+
   if (exact || target === '/') {
     return current === target;
   }

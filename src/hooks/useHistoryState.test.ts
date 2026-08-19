@@ -91,4 +91,45 @@ describe('useHistoryState', () => {
     expect(result.current.canUndo).toBe(false);
     expect(result.current.canRedo).toBe(false);
   });
+  it('re-trims the undo stack when capacity is lowered at runtime', () => {
+    const { result, rerender } = renderHook(
+      ({ capacity }: { capacity: number }) => useHistoryState(0, { capacity }),
+      { initialProps: { capacity: 10 } },
+    );
+    for (const n of [1, 2, 3, 4, 5]) {
+      act(() => result.current.set(n));
+    }
+
+    rerender({ capacity: 2 });
+    act(() => result.current.set(6));
+
+    act(() => result.current.undo());
+    act(() => result.current.undo());
+    expect(result.current.state).toBe(4);
+    expect(result.current.canUndo).toBe(false);
+  });
+
+  it('keeps no history with capacity 0', () => {
+    const { result } = renderHook(() => useHistoryState(0, { capacity: 0 }));
+    act(() => result.current.set(1));
+    expect(result.current.state).toBe(1);
+    expect(result.current.canUndo).toBe(false);
+  });
+
+  it('resets to the initial value or to an explicit value', () => {
+    const { result } = renderHook(() => useHistoryState('a'));
+    act(() => result.current.set('b'));
+    act(() => result.current.set('c'));
+    act(() => result.current.undo());
+
+    act(() => result.current.reset());
+    expect(result.current.state).toBe('a');
+    expect(result.current.canUndo).toBe(false);
+    expect(result.current.canRedo).toBe(false);
+
+    act(() => result.current.set('d'));
+    act(() => result.current.reset('z'));
+    expect(result.current.state).toBe('z');
+    expect(result.current.canUndo).toBe(false);
+  });
 });

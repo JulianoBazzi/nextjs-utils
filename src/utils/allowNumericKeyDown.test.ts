@@ -16,7 +16,9 @@ function fireKey(
     ...modifiers,
     preventDefault,
   } as unknown as KeyboardEvent<HTMLInputElement>;
-  allowNumericKeyDown(event, options);
+  const allowed = allowNumericKeyDown(event, options);
+  // The return value mirrors whether preventDefault was called.
+  expect(allowed).toBe(!preventDefault.mock.calls.length);
   return preventDefault;
 }
 
@@ -51,5 +53,16 @@ describe('allowNumericKeyDown', () => {
   it('respects allowNegative', () => {
     expect(fireKey('-')).toHaveBeenCalledOnce();
     expect(fireKey('-', {}, { allowNegative: true })).not.toHaveBeenCalled();
+  });
+  it('filters AltGr characters instead of treating them as shortcuts', () => {
+    expect(fireKey('€', { ctrlKey: true, altKey: true })).toHaveBeenCalledOnce();
+    expect(fireKey('5', { ctrlKey: true, altKey: true })).not.toHaveBeenCalled();
+    expect(fireKey('a', { altKey: true })).not.toHaveBeenCalled();
+  });
+
+  it('blocks scientific-notation and sign characters by default', () => {
+    expect(fireKey('e')).toHaveBeenCalledOnce();
+    expect(fireKey('+')).toHaveBeenCalledOnce();
+    expect(fireKey(',', {}, { allowNegative: true })).toHaveBeenCalledOnce();
   });
 });

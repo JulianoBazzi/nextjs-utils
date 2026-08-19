@@ -1,14 +1,25 @@
 import { useCallback, useSyncExternalStore } from 'react';
 
+export interface UseHashParamSetOptions {
+  /**
+   * `'push'` (default) assigns `location.hash`, adding a history entry.
+   * `'replace'` rewrites the current entry via `history.replaceState`.
+   */
+  history?: 'push' | 'replace';
+}
+
 function subscribe(onChange: () => void) {
   if (typeof window === 'undefined') {
     return () => {};
   }
 
   window.addEventListener('hashchange', onChange);
+  // `pushState`/`replaceState` (used by the App Router) never fire `hashchange`.
+  window.addEventListener('popstate', onChange);
 
   return () => {
     window.removeEventListener('hashchange', onChange);
+    window.removeEventListener('popstate', onChange);
   };
 }
 
@@ -17,7 +28,15 @@ function getSnapshot(): string | undefined {
     return undefined;
   }
   const hash = window.location.hash.replace(/^#/, '');
-  return hash === '' ? undefined : decodeURIComponent(hash);
+  if (hash === '') {
+    return undefined;
+  }
+  try {
+    return decodeURIComponent(hash);
+  } catch {
+    // Malformed percent-escapes (e.g. `#%`) must never crash the render.
+    return hash;
+  }
 }
 
 const getServerSnapshot = () => undefined;
@@ -33,17 +52,21 @@ const getServerSnapshot = () => undefined;
  */
 export function useHashParam(
   defaultValue?: string,
-): [string | undefined, (value?: string) => void] {
+): [string | undefined, (value?: string, options?: UseHashParamSetOptions) => void] {
   const hash = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
-  const setHash = useCallback((value?: string) => {
+  const setHash = useCallback((value?: string, options?: UseHashParamSetOptions) => {
     if (typeof window === 'undefined') {
       return;
     }
 
+    const base = window.location.pathname + window.location.search;
+
     if (value === undefined || value === '') {
       // Assigning an empty `location.hash` leaves a dangling '#' in the URL.
-      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      window.history.replaceState(null, '', base);
+    } else if (options?.history === 'replace') {
+      window.history.replaceState(null, '', `${base}#${encodeURIComponent(value)}`);
     } else {
       window.location.hash = encodeURIComponent(value);
     }

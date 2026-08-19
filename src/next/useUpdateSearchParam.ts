@@ -24,8 +24,9 @@ export function useUpdateSearchParam(options: UpdateSearchParamOptions = {}) {
   return useCallback(
     (value?: string) => {
       const next = value || undefined;
-      const currentValue = searchParams.get(key) ?? undefined;
-      if (next === currentValue) {
+      const current = searchParams.getAll(key);
+      // No-op only when the URL holds exactly this single value (duplicates get cleaned up).
+      if (current.length <= 1 && current[0] === next) {
         return;
       }
       update({ [key]: next } as Partial<QueryParams>);

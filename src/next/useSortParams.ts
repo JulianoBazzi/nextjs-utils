@@ -13,6 +13,12 @@ export interface UseSortParamsOptions {
   defaultSort?: string;
   /** Direction applied when a column is first sorted. Default `'asc'`. */
   defaultOrder?: SortOrder;
+  /**
+   * Columns that may be sorted. A URL value outside this list is ignored
+   * (falls back to `defaultSort`) and `toggleSort` refuses unknown columns.
+   * Strongly recommended when `sortBy` is forwarded to a database query.
+   */
+  allowedSorts?: readonly string[];
   /** Navigation method. Default `'replace'`. */
   history?: 'push' | 'replace';
   /** Scroll to top after navigation. Default `false`. */
@@ -42,6 +48,7 @@ export function useSortParams(options: UseSortParamsOptions = {}): UseSortParams
     orderKey = 'order',
     defaultSort,
     defaultOrder = 'asc',
+    allowedSorts,
     history,
     scroll,
   } = options;
@@ -49,7 +56,14 @@ export function useSortParams(options: UseSortParamsOptions = {}): UseSortParams
   const searchParams = useSearchParams();
   const updateQueryParams = useUpdateQueryParams({ history, scroll });
 
-  const sortBy = searchParams.get(sortKey) ?? defaultSort;
+  const isAllowed = useCallback(
+    (column: string) =>
+      column !== '' && (allowedSorts === undefined || allowedSorts.includes(column)),
+    [allowedSorts],
+  );
+
+  const rawSort = searchParams.get(sortKey);
+  const sortBy = rawSort !== null && isAllowed(rawSort) ? rawSort : defaultSort;
   const rawOrder = searchParams.get(orderKey);
   const order: SortOrder = rawOrder === 'asc' || rawOrder === 'desc' ? rawOrder : defaultOrder;
 
@@ -57,6 +71,9 @@ export function useSortParams(options: UseSortParamsOptions = {}): UseSortParams
 
   const toggleSort = useCallback(
     (column: string) => {
+      if (!isAllowed(column)) {
+        return;
+      }
       if (sortBy !== column) {
         updateQueryParams({ [sortKey]: column, [orderKey]: defaultOrder });
         return;
@@ -67,7 +84,7 @@ export function useSortParams(options: UseSortParamsOptions = {}): UseSortParams
       }
       updateQueryParams({ [sortKey]: undefined, [orderKey]: undefined });
     },
-    [updateQueryParams, sortKey, orderKey, sortBy, order, defaultOrder, flippedOrder],
+    [updateQueryParams, sortKey, orderKey, sortBy, order, defaultOrder, flippedOrder, isAllowed],
   );
 
   const clearSort = useCallback(() => {

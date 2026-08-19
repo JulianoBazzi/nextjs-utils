@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useHashParam } from './useHashParam';
 
 function setHash(hash: string) {
@@ -75,5 +75,34 @@ describe('useHashParam', () => {
 
     expect(window.location.hash).toBe(`#${encodeURIComponent('a b/c')}`);
     expect(result.current[0]).toBe('a b/c');
+  });
+
+  it('falls back to the raw hash when it is not decodable', () => {
+    act(() => setHash('%E0%A4%A'));
+    const { result } = renderHook(() => useHashParam());
+    expect(result.current[0]).toBe('%E0%A4%A');
+  });
+
+  it('re-reads the hash on popstate (history API navigations)', () => {
+    const { result } = renderHook(() => useHashParam());
+
+    act(() => {
+      window.history.replaceState(null, '', '#via-history');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+
+    expect(result.current[0]).toBe('via-history');
+  });
+
+  it("replaces the current history entry with history: 'replace'", () => {
+    const spy = vi.spyOn(window.history, 'replaceState');
+    const { result } = renderHook(() => useHashParam());
+
+    act(() => result.current[1]('quiet tab', { history: 'replace' }));
+
+    expect(spy).toHaveBeenCalledWith(null, '', expect.stringMatching(/#quiet%20tab$/));
+    expect(window.location.hash).toBe('#quiet%20tab');
+    expect(result.current[0]).toBe('quiet tab');
+    spy.mockRestore();
   });
 });

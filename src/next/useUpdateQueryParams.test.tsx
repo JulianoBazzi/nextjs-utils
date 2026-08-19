@@ -5,7 +5,7 @@ import { type QueryParams, useUpdateQueryParams } from './useUpdateQueryParams';
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   replace: vi.fn(),
-  pathname: '/items',
+  pathname: '/items' as string | null,
   searchParams: new URLSearchParams(),
 }));
 
@@ -22,7 +22,9 @@ function setUrl(query = '') {
 afterEach(() => {
   mocks.push.mockClear();
   mocks.replace.mockClear();
+  mocks.pathname = '/items';
   setUrl('');
+  vi.unstubAllGlobals();
 });
 
 describe('useUpdateQueryParams', () => {
@@ -79,5 +81,52 @@ describe('useUpdateQueryParams', () => {
     result.current({ q: 'x' });
     expect(mocks.push).toHaveBeenCalledWith('/items?q=x', { scroll: true });
     expect(mocks.replace).not.toHaveBeenCalled();
+  });
+  it('treats non-finite numbers as empty', () => {
+    setUrl('page=2');
+    const { result } = renderHook(() => useUpdateQueryParams());
+    result.current({ page: Number.NaN, tag: [1, Number.POSITIVE_INFINITY] });
+    expect(mocks.replace).toHaveBeenCalledWith('/items?tag=1', { scroll: false });
+  });
+
+  it('keeps ignored keys containing commas intact', () => {
+    const { result } = renderHook(() =>
+      useUpdateQueryParams<QueryParams>({ ignoredParams: ['a,b'] }),
+    );
+    result.current({ 'a,b': 'x', a: '1', b: '2' });
+    expect(mocks.replace).toHaveBeenCalledWith('/items?a=1&b=2', { scroll: false });
+  });
+
+  it('falls back to a relative URL when the pathname is null', () => {
+    mocks.pathname = null;
+    const { result } = renderHook(() => useUpdateQueryParams());
+    result.current({ status: 'active' });
+    expect(mocks.replace).toHaveBeenCalledWith('?status=active', { scroll: false });
+  });
+
+  it('skips the navigation for unchanged params with skipUnchanged', () => {
+    setUrl('b=2&a=1');
+    const { result } = renderHook(() => useUpdateQueryParams({ skipUnchanged: true }));
+
+    result.current({ a: '1' });
+    expect(mocks.replace).not.toHaveBeenCalled();
+
+    result.current({ a: '3' });
+    expect(mocks.replace).toHaveBeenCalledWith('/items?b=2&a=3', { scroll: false });
+  });
+
+  it('preserves the hash with preserveHash', () => {
+    window.location.hash = '#details';
+    const { result } = renderHook(() => useUpdateQueryParams({ preserveHash: true }));
+    result.current({ status: 'active' });
+    expect(mocks.replace).toHaveBeenCalledWith('/items?status=active#details', { scroll: false });
+    window.history.replaceState(null, '', window.location.pathname);
+  });
+
+  it('ignores preserveHash when window is unavailable', () => {
+    const { result } = renderHook(() => useUpdateQueryParams({ preserveHash: true }));
+    vi.stubGlobal('window', undefined);
+    result.current({ status: 'active' });
+    expect(mocks.replace).toHaveBeenCalledWith('/items?status=active', { scroll: false });
   });
 });

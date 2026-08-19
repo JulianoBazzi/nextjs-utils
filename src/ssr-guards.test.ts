@@ -1,5 +1,7 @@
 import { renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useBeforeUnload } from './hooks/useBeforeUnload';
+import { useBroadcastChannel } from './hooks/useBroadcastChannel';
 import { useCookie } from './hooks/useCookie';
 import { useEventListener } from './hooks/useEventListener';
 import { useIdle } from './hooks/useIdle';
@@ -149,7 +151,23 @@ describe('SSR guards', () => {
     renderHook(() => useEventListener('click', () => {}));
 
     vi.stubGlobal('window', undefined);
-    // effects[0] syncs the handler ref; effects[1] attaches the listener.
+    // The handler ref syncs in a layout effect (not captured); effects[0] attaches the listener.
+    expect(pick(captured.effects, 0)()).toBeUndefined();
+  });
+  it('useBroadcastChannel neither subscribes nor posts on the server', () => {
+    const { result } = renderHook(() => useBroadcastChannel<string>('ssr'));
+
+    vi.stubGlobal('window', undefined);
+    // effects[0] syncs the refs; effects[1] opens the channel.
+    expect(pick(captured.effects, 1)()).toBeUndefined();
+    expect(() => result.current.postMessage('hello')).not.toThrow();
+  });
+
+  it('useBeforeUnload does not register a listener on the server', () => {
+    renderHook(() => useBeforeUnload(true));
+
+    vi.stubGlobal('window', undefined);
+    // effects[0] syncs the message ref; effects[1] registers the listener.
     expect(pick(captured.effects, 1)()).toBeUndefined();
   });
 });

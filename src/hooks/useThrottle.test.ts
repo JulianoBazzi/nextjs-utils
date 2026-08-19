@@ -114,5 +114,34 @@ describe('useThrottle', () => {
 
       expect(fn).toHaveBeenCalledTimes(1);
     });
+    it('cancel drops the pending trailing call', () => {
+      const fn = vi.fn();
+      const { result } = renderHook(() => useThrottle(fn, 500));
+
+      act(() => result.current('a'));
+      act(() => result.current('b'));
+      act(() => result.current.cancel());
+      act(() => vi.advanceTimersByTime(500));
+
+      expect(fn).toHaveBeenCalledTimes(1);
+      expect(fn).toHaveBeenCalledWith('a');
+    });
+
+    it('flush runs the pending trailing call immediately, once', () => {
+      const fn = vi.fn();
+      const { result } = renderHook(() => useThrottle(fn, 500));
+
+      act(() => result.current.flush());
+      expect(fn).not.toHaveBeenCalled();
+
+      act(() => result.current('a'));
+      act(() => result.current('b'));
+      act(() => result.current.flush());
+      expect(fn).toHaveBeenCalledTimes(2);
+      expect(fn).toHaveBeenLastCalledWith('b');
+
+      act(() => vi.advanceTimersByTime(500));
+      expect(fn).toHaveBeenCalledTimes(2);
+    });
   });
 });

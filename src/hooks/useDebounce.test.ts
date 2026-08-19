@@ -118,5 +118,31 @@ describe('useDebounce', () => {
 
       expect(fn).not.toHaveBeenCalled();
     });
+    it('cancel drops the pending call', () => {
+      const fn = vi.fn();
+      const { result } = renderHook(() => useDebounce(fn, 500));
+
+      act(() => result.current('a'));
+      act(() => result.current.cancel());
+      act(() => vi.advanceTimersByTime(500));
+
+      expect(fn).not.toHaveBeenCalled();
+    });
+
+    it('flush runs the pending call immediately, once', () => {
+      const fn = vi.fn();
+      const { result } = renderHook(() => useDebounce(fn, 500));
+
+      act(() => result.current.flush());
+      expect(fn).not.toHaveBeenCalled();
+
+      act(() => result.current('a', 1));
+      act(() => result.current.flush());
+      expect(fn).toHaveBeenCalledTimes(1);
+      expect(fn).toHaveBeenCalledWith('a', 1);
+
+      act(() => vi.advanceTimersByTime(500));
+      expect(fn).toHaveBeenCalledTimes(1);
+    });
   });
 });

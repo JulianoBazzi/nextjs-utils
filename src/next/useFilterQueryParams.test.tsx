@@ -70,4 +70,47 @@ describe('useFilterQueryParams', () => {
     );
     expect(mocks.replace).toHaveBeenCalledWith('/items?status=archived', { scroll: false });
   });
+  it('does not touch the search state on mount without initialSearch', () => {
+    const setSearch = vi.fn();
+    renderHook(() => useFilterQueryParams({ parameters: () => ({}), deps: [], setSearch }));
+    expect(setSearch).not.toHaveBeenCalled();
+  });
+
+  it('re-seeds when initialSearch changes, including back to undefined', () => {
+    const setSearch = vi.fn();
+    const { rerender } = renderHook(
+      ({ initialSearch }: { initialSearch?: string }) =>
+        useFilterQueryParams({ parameters: () => ({}), deps: [], setSearch, initialSearch }),
+      { initialProps: { initialSearch: 'seed' } as { initialSearch?: string } },
+    );
+    expect(setSearch).toHaveBeenLastCalledWith('seed');
+
+    rerender({ initialSearch: undefined });
+    expect(setSearch).toHaveBeenLastCalledWith(undefined);
+  });
+
+  it('writes the search term under a custom searchKey', () => {
+    renderHook(() =>
+      useFilterQueryParams({ parameters: () => ({}), deps: [], search: 'abc', searchKey: 'q' }),
+    );
+    expect(mocks.replace).toHaveBeenCalledWith('/items?q=abc', { scroll: false });
+  });
+
+  it('re-syncs when deps or search change and keeps a stable return object', () => {
+    let status = 'active';
+    const { result, rerender } = renderHook(
+      ({ search }: { search?: string }) =>
+        useFilterQueryParams({ parameters: () => ({ status }), deps: [status], search }),
+      { initialProps: { search: undefined } as { search?: string } },
+    );
+    const first = result.current;
+    expect(mocks.replace).toHaveBeenLastCalledWith('/items?status=active', { scroll: false });
+
+    status = 'archived';
+    rerender({ search: 'x' });
+    expect(mocks.replace).toHaveBeenLastCalledWith('/items?status=archived&search=x', {
+      scroll: false,
+    });
+    expect(result.current).toBe(first);
+  });
 });

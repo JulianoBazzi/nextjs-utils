@@ -52,4 +52,10 @@ describe('useUpdateSearchParam', () => {
     expect(mocks.replace).not.toHaveBeenCalled();
     expect(mocks.push).not.toHaveBeenCalled();
   });
+  it('collapses duplicated params even when the value is unchanged', () => {
+    setUrl('search=a&search=a');
+    const { result } = renderHook(() => useUpdateSearchParam());
+    result.current('a');
+    expect(mocks.replace).toHaveBeenCalledWith('/items?search=a', { scroll: false });
+  });
 });

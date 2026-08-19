@@ -90,4 +90,46 @@ describe('usePaginationParams', () => {
     result.current.setPage(4);
     expect(mocks.push).toHaveBeenCalledWith('/items?p=4', { scroll: true });
   });
+  it('rejects lenient numeric strings and unsafe integers', () => {
+    setUrl('page=3abc&pageSize=1e9');
+    const { result } = renderHook(() => usePaginationParams());
+    expect(result.current.page).toBe(1);
+    expect(result.current.pageSize).toBe(10);
+
+    setUrl('page=99999999999999999999&pageSize=3.5');
+    const { result: huge } = renderHook(() => usePaginationParams());
+    expect(huge.current.page).toBe(1);
+    expect(huge.current.pageSize).toBe(10);
+  });
+
+  it('clamps the page size to maxPageSize', () => {
+    setUrl('pageSize=100000000');
+    const { result } = renderHook(() => usePaginationParams({ maxPageSize: 100 }));
+    expect(result.current.pageSize).toBe(100);
+
+    result.current.setPageSize(500);
+    expect(mocks.replace).toHaveBeenCalledWith('/items?pageSize=100', { scroll: false });
+  });
+
+  it('drops the page size param when the clamped size equals the default', () => {
+    const { result } = renderHook(() =>
+      usePaginationParams({ defaultPageSize: 50, maxPageSize: 50 }),
+    );
+    result.current.setPageSize(500);
+    expect(mocks.replace).toHaveBeenCalledWith('/items', { scroll: false });
+  });
+
+  it('treats invalid setter input as a reset', () => {
+    setUrl('page=3&pageSize=25');
+    const { result } = renderHook(() => usePaginationParams());
+
+    result.current.setPage(Number.NaN);
+    expect(mocks.replace).toHaveBeenLastCalledWith('/items?pageSize=25', { scroll: false });
+
+    result.current.setPage(2.5);
+    expect(mocks.replace).toHaveBeenLastCalledWith('/items?pageSize=25', { scroll: false });
+
+    result.current.setPageSize(0);
+    expect(mocks.replace).toHaveBeenLastCalledWith('/items', { scroll: false });
+  });
 });

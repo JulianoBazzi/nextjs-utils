@@ -94,4 +94,33 @@ describe('useSortParams', () => {
     expect(result.current.sortBy).toBe('name');
     expect(result.current.order).toBe('desc');
   });
+  it('ignores URL columns outside allowedSorts', () => {
+    setUrl('sortBy=password&order=desc');
+    const { result } = renderHook(() =>
+      useSortParams({ allowedSorts: ['name', 'createdAt'], defaultSort: 'name' }),
+    );
+    expect(result.current.sortBy).toBe('name');
+    expect(result.current.order).toBe('desc');
+  });
+
+  it('accepts URL columns listed in allowedSorts', () => {
+    setUrl('sortBy=createdAt');
+    const { result } = renderHook(() => useSortParams({ allowedSorts: ['name', 'createdAt'] }));
+    expect(result.current.sortBy).toBe('createdAt');
+  });
+
+  it('refuses to toggle columns outside allowedSorts', () => {
+    const { result } = renderHook(() => useSortParams({ allowedSorts: ['name'] }));
+    result.current.toggleSort('id;--');
+    expect(mocks.replace).not.toHaveBeenCalled();
+
+    result.current.toggleSort('name');
+    expect(mocks.replace).toHaveBeenCalledWith('/items?sortBy=name&order=asc', { scroll: false });
+  });
+
+  it('ignores an empty column', () => {
+    const { result } = renderHook(() => useSortParams());
+    result.current.toggleSort('');
+    expect(mocks.replace).not.toHaveBeenCalled();
+  });
 });
