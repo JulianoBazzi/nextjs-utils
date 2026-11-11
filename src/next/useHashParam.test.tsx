@@ -106,3 +106,65 @@ describe('useHashParam', () => {
     spy.mockRestore();
   });
 });
+
+describe('useHashParam: history handling', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('clears with a new history entry when asked to push', () => {
+    const { result } = renderHook(() => useHashParam());
+    act(() => result.current[1]('details'));
+    const pushState = vi.spyOn(window.history, 'pushState');
+
+    act(() => result.current[1](undefined, { history: 'push' }));
+
+    expect(pushState).toHaveBeenCalledWith(null, '', window.location.pathname);
+    expect(result.current[0]).toBeUndefined();
+  });
+
+  it("keeps the Pages Router's history state on History API updates", () => {
+    const state = { __N: true, as: '/' };
+    window.history.replaceState(state, '', window.location.pathname);
+    const replaceState = vi.spyOn(window.history, 'replaceState');
+    const { result } = renderHook(() => useHashParam());
+
+    act(() => result.current[1]('tab', { history: 'replace' }));
+
+    expect(replaceState).toHaveBeenCalledWith(state, '', expect.stringMatching(/#tab$/));
+  });
+
+  it('passes null for any other history state', () => {
+    const replaceState = vi.spyOn(window.history, 'replaceState');
+    const { result } = renderHook(() => useHashParam());
+
+    for (const state of ['plain', { other: true }]) {
+      window.history.pushState(state, '', window.location.pathname);
+      act(() => result.current[1]('tab', { history: 'replace' }));
+      expect(replaceState).toHaveBeenLastCalledWith(null, '', expect.stringMatching(/#tab$/));
+    }
+  });
+
+  it('updates synchronously without a duplicate hashchange when pushing', () => {
+    const onHashChange = vi.fn();
+    window.addEventListener('hashchange', onHashChange);
+    const { result } = renderHook(() => useHashParam());
+
+    act(() => result.current[1]('sync'));
+
+    expect(result.current[0]).toBe('sync');
+    expect(onHashChange).not.toHaveBeenCalled();
+    window.removeEventListener('hashchange', onHashChange);
+  });
+
+  it('emits hashchange for History API updates', () => {
+    const onHashChange = vi.fn();
+    window.addEventListener('hashchange', onHashChange);
+    const { result } = renderHook(() => useHashParam());
+
+    act(() => result.current[1]('quiet', { history: 'replace' }));
+
+    expect(onHashChange).toHaveBeenCalledTimes(1);
+    window.removeEventListener('hashchange', onHashChange);
+  });
+});

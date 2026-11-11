@@ -3,16 +3,21 @@ import { useIsomorphicLayoutEffect } from './useIsomorphicLayoutEffect';
 import type { SetValue } from './useLocalStorage';
 
 export interface CookieOptions<T = string> {
-  /** Expiration in days. Omit for a session cookie. */
+  /** Expiration in days. Omit (together with `maxAge`) for a session cookie. */
   days?: number;
+  /** Expiration in seconds. Takes precedence over `days`. */
+  maxAge?: number;
   /** Cookie path. Default `'/'`. Must not contain `;`, `,` or whitespace. */
   path?: string;
   /** Cookie domain (e.g. `'example.com'`). Omit to scope to the current host. */
   domain?: string;
   /** SameSite attribute. Default `'lax'`. `'none'` requires `secure: true`. */
   sameSite?: 'lax' | 'strict' | 'none';
-  /** Only send the cookie over HTTPS. Default `false`. */
-  secure?: boolean;
+  /**
+   * Only send the cookie over HTTPS. `'auto'` sets it when the page itself is
+   * served over HTTPS. Default `false`.
+   */
+  secure?: boolean | 'auto';
   /** Turns a value into the (un-encoded) cookie string. Default `JSON.stringify`. Keep it stable. */
   serializer?: (value: T) => string;
   /**
@@ -51,8 +56,9 @@ function defaultDeserializer<T>(raw: string): T {
 
 /**
  * Persist state in a cookie, JSON-serialized and synced across components in
- * the same tab (cookie writes from other tabs or from the server are not
- * observed until the next read). SSR-safe: falls back to `initialValue` when
+ * the same tab. Changes from other tabs or from the server are picked up via
+ * the Cookie Store API `change` event where supported, and otherwise when the
+ * tab regains focus or visibility. SSR-safe: falls back to `initialValue` when
  * `document` is unavailable; for server-side reads use `cookies()` from
  * `next/headers`.
  *
@@ -72,6 +78,7 @@ export function useCookie<T = string>(
 ): [T, SetValue<T>, () => void] {
   const {
     days,
+    maxAge,
     path = '/',
     domain,
     sameSite = 'lax',
@@ -103,10 +110,20 @@ export function useCookie<T = string>(
         onChange();
       };
 
+      // Other tabs and the server write cookies silently: re-read when the tab
+      // comes back, and on Cookie Store `change` events where available.
+      const cookieStore = (window as { cookieStore?: EventTarget }).cookieStore;
+
       window.addEventListener('cookie-change', handler);
+      window.addEventListener('focus', onChange);
+      document.addEventListener('visibilitychange', onChange);
+      cookieStore?.addEventListener('change', onChange);
 
       return () => {
         window.removeEventListener('cookie-change', handler);
+        window.removeEventListener('focus', onChange);
+        document.removeEventListener('visibilitychange', onChange);
+        cookieStore?.removeEventListener('change', onChange);
       };
     },
     [name],
@@ -135,7 +152,7 @@ export function useCookie<T = string>(
   const value: T = parsed === null ? initialValue : parsed.value;
 
   const writeCookie = useCallback(
-    (serialized: string, maxAge?: number) => {
+    (serialized: string, maxAgeSeconds?: number) => {
       // Attributes are interpolated raw into the cookie string; refuse values
       // that could smuggle extra attributes (e.g. `path: '/; domain=evil.com'`).
       if (/[;,\s]/.test(path)) {
@@ -152,10 +169,11 @@ export function useCookie<T = string>(
       if (domain !== undefined) {
         cookie += `; domain=${domain}`;
       }
-      if (maxAge !== undefined) {
-        cookie += `; max-age=${maxAge}`;
+      if (maxAgeSeconds !== undefined) {
+        cookie += `; max-age=${maxAgeSeconds}`;
       }
-      if (secure || sameSite === 'none') {
+      const isSecure = secure === 'auto' ? window.location.protocol === 'https:' : secure;
+      if (isSecure || sameSite === 'none') {
         cookie += '; secure';
       }
       // biome-ignore lint/suspicious/noDocumentCookie: the Cookie Store API is async and lacks universal browser support
@@ -188,10 +206,10 @@ export function useCookie<T = string>(
       }
       writeCookie(
         encodeURIComponent(serializerRef.current(resolved)),
-        days === undefined ? undefined : days * 86400,
+        maxAge ?? (days === undefined ? undefined : days * 86400),
       );
     },
-    [name, days, parse, remove, writeCookie],
+    [name, days, maxAge, parse, remove, writeCookie],
   );
 
   return [value, setValue, remove];

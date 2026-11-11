@@ -1,5 +1,6 @@
 import { useSearchParams } from 'next/navigation';
 import { useCallback } from 'react';
+import { deletionsOf, useStableList } from './internal/useQueryNavigation';
 import { useUpdateQueryParams } from './useUpdateQueryParams';
 
 export type SortOrder = 'asc' | 'desc';
@@ -19,6 +20,11 @@ export interface UseSortParamsOptions {
    * Strongly recommended when `sortBy` is forwarded to a database query.
    */
   allowedSorts?: readonly string[];
+  /**
+   * Keys deleted in the same navigation whenever the sort changes — e.g.
+   * `['page']` to go back to the first page. Default `[]`.
+   */
+  resetKeys?: string[];
   /** Navigation method. Default `'replace'`. */
   history?: 'push' | 'replace';
   /** Scroll to top after navigation. Default `false`. */
@@ -31,13 +37,17 @@ export interface UseSortParamsReturn {
   /** The sorted column, or `undefined` when unsorted. */
   sortBy: string | undefined;
   order: SortOrder;
-  /** Cycle a column: unsorted -> `defaultOrder` -> flipped -> unsorted. */
+  /**
+   * Cycle a column: unsorted -> `defaultOrder` -> flipped -> unsorted. With
+   * `defaultSort`, clearing falls back to that column, so it only alternates
+   * between the two directions.
+   */
   toggleSort: (column: string) => void;
   clearSort: () => void;
 }
 
 /**
- * Table sorting state stored in the URL (Next.js App Router). `toggleSort`
+ * Table sorting state stored in the URL (Next.js App and Pages Router). `toggleSort`
  * cycles the direction of a column and switching columns starts over at
  * `defaultOrder`, matching typical sortable table headers.
  *
@@ -51,6 +61,7 @@ export function useSortParams(options: UseSortParamsOptions = {}): UseSortParams
     defaultSort,
     defaultOrder = 'asc',
     allowedSorts,
+    resetKeys = [],
     history,
     scroll,
     shallow,
@@ -58,6 +69,7 @@ export function useSortParams(options: UseSortParamsOptions = {}): UseSortParams
 
   const searchParams = useSearchParams();
   const updateQueryParams = useUpdateQueryParams({ history, scroll, shallow });
+  const resetList = useStableList(resetKeys);
 
   const isAllowed = useCallback(
     (column: string) =>
@@ -77,22 +89,33 @@ export function useSortParams(options: UseSortParamsOptions = {}): UseSortParams
       if (!isAllowed(column)) {
         return;
       }
+      const resets = deletionsOf(resetList);
       if (sortBy !== column) {
-        updateQueryParams({ [sortKey]: column, [orderKey]: defaultOrder });
+        updateQueryParams({ ...resets, [sortKey]: column, [orderKey]: defaultOrder });
         return;
       }
       if (order === defaultOrder) {
-        updateQueryParams({ [sortKey]: column, [orderKey]: flippedOrder });
+        updateQueryParams({ ...resets, [sortKey]: column, [orderKey]: flippedOrder });
         return;
       }
-      updateQueryParams({ [sortKey]: undefined, [orderKey]: undefined });
+      updateQueryParams({ ...resets, [sortKey]: undefined, [orderKey]: undefined });
     },
-    [updateQueryParams, sortKey, orderKey, sortBy, order, defaultOrder, flippedOrder, isAllowed],
+    [
+      updateQueryParams,
+      sortKey,
+      orderKey,
+      sortBy,
+      order,
+      defaultOrder,
+      flippedOrder,
+      isAllowed,
+      resetList,
+    ],
   );
 
   const clearSort = useCallback(() => {
-    updateQueryParams({ [sortKey]: undefined, [orderKey]: undefined });
-  }, [updateQueryParams, sortKey, orderKey]);
+    updateQueryParams({ ...deletionsOf(resetList), [sortKey]: undefined, [orderKey]: undefined });
+  }, [updateQueryParams, sortKey, orderKey, resetList]);
 
   return { sortBy, order, toggleSort, clearSort };
 }

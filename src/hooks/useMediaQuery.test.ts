@@ -85,3 +85,21 @@ describe('useMediaQuery', () => {
     expect(result.current).toBe(false);
   });
 });
+
+describe('useMediaQuery: defaultValue', () => {
+  it('returns defaultValue when matchMedia is unsupported', () => {
+    const { result } = renderHook(() =>
+      useMediaQuery('(max-width: 600px)', { defaultValue: true }),
+    );
+    expect(result.current).toBe(true);
+  });
+
+  it('still reports the real match on the client', () => {
+    mockMatchMedia(false);
+    const { result } = renderHook(() =>
+      useMediaQuery('(max-width: 600px)', { defaultValue: true }),
+    );
+    expect(result.current).toBe(false);
+    vi.unstubAllGlobals();
+  });
+});

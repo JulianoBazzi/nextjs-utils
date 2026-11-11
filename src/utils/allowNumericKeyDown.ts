@@ -16,10 +16,11 @@ export interface AllowNumericKeyDownOptions {
  * pass through. AltGr combinations (reported as Ctrl+Alt on Windows/Linux) are
  * filtered like plain keys.
  *
- * This is a typing convenience, not validation: paste, drag-and-drop, IME
- * composition, autofill and programmatic changes bypass `keydown` entirely, and
- * repeated separators (`1.2.3`) are not prevented. Always validate the value in
- * `onChange`/on submit.
+ * This is a typing convenience for physical keyboards, not validation: virtual
+ * keyboards (Android reports `key === 'Unidentified'`), paste, drag-and-drop,
+ * IME composition, autofill and programmatic changes bypass it, and repeated
+ * separators (`1.2.3`) are not prevented. Prefer `allowNumericBeforeInput`,
+ * which checks the resulting value, and always validate on submit.
  *
  * @returns `true` when the key was allowed, `false` when it was prevented
  * @example <input onKeyDown={allowNumericKeyDown} />

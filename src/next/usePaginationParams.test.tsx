@@ -133,3 +133,32 @@ describe('usePaginationParams', () => {
     expect(mocks.replace).toHaveBeenLastCalledWith('/items', { scroll: false });
   });
 });
+
+describe('usePaginationParams: lastPage', () => {
+  afterEach(async () => {
+    await Promise.resolve();
+  });
+
+  it('clamps a page above lastPage, on read and on write', () => {
+    setUrl('page=9');
+    const { result } = renderHook(() => usePaginationParams({ lastPage: 5 }));
+
+    expect(result.current.page).toBe(5);
+    expect(mocks.replace).not.toHaveBeenCalled();
+
+    result.current.setPage(7);
+    expect(mocks.replace).toHaveBeenCalledWith('/items?page=5', { scroll: false });
+  });
+
+  it('treats lastPage below 1 as a single page and floors fractions', () => {
+    setUrl('page=3');
+    const { result: empty } = renderHook(() => usePaginationParams({ lastPage: 0 }));
+    const { result: fraction } = renderHook(() => usePaginationParams({ lastPage: 2.7 }));
+
+    expect(empty.current.page).toBe(1);
+    expect(fraction.current.page).toBe(2);
+
+    empty.current.setPage(3);
+    expect(mocks.replace).toHaveBeenLastCalledWith('/items', { scroll: false });
+  });
+});

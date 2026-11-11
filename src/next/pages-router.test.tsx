@@ -1,5 +1,6 @@
 import { renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useFilterQueryParams } from './useFilterQueryParams';
 import { useUpdateQueryParams } from './useUpdateQueryParams';
 
 // Pages Router: `next/compat/router` returns the router instance. The
@@ -99,5 +100,24 @@ describe('Pages Router', () => {
       undefined,
       { shallow: false, scroll: false },
     );
+  });
+
+  it('waits for the router before the first filter sync', () => {
+    mocks.pages.isReady = false;
+    mocks.pages.asPath = '/items/[id]';
+    const { rerender } = renderHook(() =>
+      useFilterQueryParams({ parameters: () => ({ status: 'a' }), deps: [], shallow: true }),
+    );
+    expect(mocks.pages.replace).not.toHaveBeenCalled();
+
+    mocks.pages.isReady = true;
+    mocks.pages.asPath = '/items/42?tab=info';
+    rerender();
+
+    expect(mocks.pages.replace).toHaveBeenCalledTimes(1);
+    expect(mocks.pages.replace).toHaveBeenCalledWith('/items/42?tab=info&status=a', undefined, {
+      shallow: true,
+      scroll: false,
+    });
   });
 });

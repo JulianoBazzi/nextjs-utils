@@ -14,6 +14,12 @@ export interface UsePaginationParamsOptions {
    * are clamped. Recommended whenever `pageSize` feeds a database `LIMIT`.
    */
   maxPageSize?: number;
+  /**
+   * Last available page. A larger page (from the URL or `setPage`) is clamped
+   * to it; the URL itself is never rewritten automatically. Leave `undefined`
+   * while the total is unknown.
+   */
+  lastPage?: number;
   /** Navigation method. Default `'replace'`. */
   history?: 'push' | 'replace';
   /** Scroll to top after navigation. Default `false`. */
@@ -51,7 +57,7 @@ function clamp(value: number, max: number | undefined): number {
 }
 
 /**
- * Pagination state stored in the URL (Next.js App Router), so pages are
+ * Pagination state stored in the URL (Next.js App and Pages Router), so pages are
  * shareable and survive reloads. Default values are kept out of the URL:
  * page 1 and the default page size remove their params.
  *
@@ -66,6 +72,7 @@ export function usePaginationParams(
     pageSizeKey = 'pageSize',
     defaultPageSize = 10,
     maxPageSize,
+    lastPage,
     history,
     scroll,
     shallow,
@@ -74,7 +81,8 @@ export function usePaginationParams(
   const searchParams = useSearchParams();
   const updateQueryParams = useUpdateQueryParams({ history, scroll, shallow });
 
-  const page = parsePositiveInt(searchParams.get(pageKey), 1);
+  const maxPage = lastPage === undefined ? undefined : Math.max(1, Math.floor(lastPage));
+  const page = clamp(parsePositiveInt(searchParams.get(pageKey), 1), maxPage);
   const pageSize = clamp(
     parsePositiveInt(searchParams.get(pageSizeKey), defaultPageSize),
     maxPageSize,
@@ -83,11 +91,10 @@ export function usePaginationParams(
   const setPage = useCallback(
     (nextPage: number) => {
       // Invalid input (NaN, 0, negatives, non-integers) resets to the first page.
-      updateQueryParams({
-        [pageKey]: isPositiveInt(nextPage) && nextPage > 1 ? nextPage : undefined,
-      });
+      const target = isPositiveInt(nextPage) ? clamp(nextPage, maxPage) : 1;
+      updateQueryParams({ [pageKey]: target > 1 ? target : undefined });
     },
-    [updateQueryParams, pageKey],
+    [updateQueryParams, pageKey, maxPage],
   );
 
   const setPageSize = useCallback(

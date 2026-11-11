@@ -6,7 +6,12 @@ export {
   useBroadcastChannel,
 } from './hooks/useBroadcastChannel';
 export { type CookieOptions, useCookie } from './hooks/useCookie';
-export { type DebouncedFunction, useDebounce } from './hooks/useDebounce';
+export {
+  type DebouncedFunction,
+  type UseDebounceFnOptions,
+  type UseDebounceValueOptions,
+  useDebounce,
+} from './hooks/useDebounce';
 export { type EventListenerOptions, useEventListener } from './hooks/useEventListener';
 export {
   type UseHistoryStateOptions,
@@ -20,12 +25,20 @@ export {
   type UseLocalStorageOptions,
   useLocalStorage,
 } from './hooks/useLocalStorage';
-export { useMediaQuery } from './hooks/useMediaQuery';
+export { type UseMediaQueryOptions, useMediaQuery } from './hooks/useMediaQuery';
 export { useOnlineStatus } from './hooks/useOnlineStatus';
 export { usePageVisibility } from './hooks/usePageVisibility';
 export { usePrevious } from './hooks/usePrevious';
-export { type ThrottledFunction, useThrottle } from './hooks/useThrottle';
+export {
+  type ThrottledFunction,
+  type UseThrottleFnOptions,
+  useThrottle,
+} from './hooks/useThrottle';
 export { type UseToggleReturn, useToggle } from './hooks/useToggle';
+export {
+  allowNumericBeforeInput,
+  type BeforeInputEventLike,
+} from './utils/allowNumericBeforeInput';
 export {
   type AllowNumericKeyDownOptions,
   allowNumericKeyDown,

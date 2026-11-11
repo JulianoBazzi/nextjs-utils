@@ -145,3 +145,49 @@ describe('useThrottle', () => {
     });
   });
 });
+
+describe('useThrottle options', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('runs the pending trailing call on unmount with flushOnUnmount', () => {
+    const fn = vi.fn();
+    const { result, unmount } = renderHook(() => useThrottle(fn, 500, { flushOnUnmount: true }));
+
+    act(() => result.current('a'));
+    act(() => result.current('b'));
+    unmount();
+
+    expect(fn).toHaveBeenCalledTimes(2);
+    expect(fn).toHaveBeenLastCalledWith('b');
+  });
+
+  it('drops the pending trailing call on unmount by default', () => {
+    const fn = vi.fn();
+    const { result, unmount } = renderHook(() => useThrottle(fn, 500));
+
+    act(() => result.current('a'));
+    act(() => result.current('b'));
+    unmount();
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('does nothing on unmount when no trailing call is pending', () => {
+    const fn = vi.fn();
+    const { result, unmount } = renderHook(() => useThrottle(fn, 500, { flushOnUnmount: true }));
+
+    act(() => result.current('a'));
+    unmount();
+
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+});

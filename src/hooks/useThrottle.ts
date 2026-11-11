@@ -12,20 +12,28 @@ export interface ThrottledFunction<Args extends unknown[]> {
   flush: () => void;
 }
 
+export interface UseThrottleFnOptions {
+  /** Run a pending trailing call on unmount instead of dropping it. Default `false`. */
+  flushOnUnmount?: boolean;
+}
+
 /**
  * Throttle a callback. Returns a stable function that invokes `fn` at most once
  * every `delay` ms: the first call runs immediately (leading), calls made during
  * the wait collapse into one trailing call with the latest arguments. The latest
- * `fn` is always used, and the pending call is cancelled on unmount. The
- * returned function also exposes `cancel()` and `flush()`.
+ * `fn` is always used, and the pending call is cancelled on unmount (or run,
+ * with `flushOnUnmount`). The returned function also exposes `cancel()` and
+ * `flush()`.
  *
  * @param fn - the callback to throttle
  * @param delay - throttle interval in milliseconds (default `500`)
+ * @param options - unmount behavior
  * @returns a throttled version of `fn`
  */
 export function useThrottle<F extends AnyFn>(
   fn: F,
   delay?: number,
+  options?: UseThrottleFnOptions,
 ): ThrottledFunction<Parameters<F>>;
 /**
  * Throttle a rapidly changing value. The returned value updates at most once
@@ -36,7 +44,7 @@ export function useThrottle<F extends AnyFn>(
  * @returns the throttled value
  */
 export function useThrottle<T>(value: T, delay?: number): T;
-export function useThrottle(input: unknown, delay = 500) {
+export function useThrottle(input: unknown, delay = 500, options: UseThrottleFnOptions = {}) {
   const isFn = typeof input === 'function';
 
   // ---- value branch ----
@@ -66,16 +74,15 @@ export function useThrottle(input: unknown, delay = 500) {
 
   // ---- function branch ----
   const fnRef = useRef(input);
+  const optionsRef = useRef(options);
   // Synced after commit (not during render) so discarded renders never leak in.
   useIsomorphicLayoutEffect(() => {
     fnRef.current = input;
+    optionsRef.current = options;
   });
   const lastCalledAtRef = useRef(0);
   const lastArgsRef = useRef<unknown[]>([]);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  // Cancel any pending trailing call on unmount.
-  useEffect(() => () => clearTimeout(timeoutRef.current), []);
 
   const throttledFn = useMemo(() => {
     const invoke = () => {
@@ -108,6 +115,19 @@ export function useThrottle(input: unknown, delay = 500) {
     };
     return run as ThrottledFunction<unknown[]>;
   }, [delay]);
+
+  // On unmount, drop the pending trailing call — or run it with `flushOnUnmount`.
+  useEffect(
+    () => () => {
+      if (timeoutRef.current === undefined) return;
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = undefined;
+      if (optionsRef.current.flushOnUnmount) {
+        (fnRef.current as AnyFn)(...lastArgsRef.current);
+      }
+    },
+    [],
+  );
 
   return isFn ? throttledFn : throttled;
 }

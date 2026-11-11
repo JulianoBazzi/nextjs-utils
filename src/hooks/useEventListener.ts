@@ -3,10 +3,14 @@ import { useIsomorphicLayoutEffect } from './useIsomorphicLayoutEffect';
 
 type Handler<E> = (event: E) => void;
 
-/** `capture`, `once` and `passive` are supported; `signal` is not. */
+/**
+ * `capture`, `once` and `passive` are supported; `signal` is not. `enabled:
+ * false` detaches the listener (default `true`) — handy for conditional
+ * listeners without breaking the rules of hooks.
+ */
 export type EventListenerOptions =
   | boolean
-  | Pick<AddEventListenerOptions, 'capture' | 'once' | 'passive'>;
+  | (Pick<AddEventListenerOptions, 'capture' | 'once' | 'passive'> & { enabled?: boolean });
 
 /**
  * Attach an event listener to `window` with automatic cleanup.
@@ -66,10 +70,15 @@ export function useEventListener(
   }, [handler]);
 
   // Depend on primitives so an inline options object doesn't re-attach every render.
-  const normalized = typeof options === 'object' ? options : { capture: options };
-  const { capture, once, passive } = normalized;
+  const normalized: Exclude<EventListenerOptions, boolean> =
+    typeof options === 'object' ? options : { capture: options };
+  const { capture, once, passive, enabled = true } = normalized;
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     const target: EventTarget | null =
       element && 'current' in element ? element.current : (element ?? globalThis.window ?? null);
 
@@ -87,5 +96,5 @@ export function useEventListener(
     return () => {
       target.removeEventListener(eventName, listener, listenerOptions);
     };
-  }, [eventName, element, capture, once, passive]);
+  }, [eventName, element, capture, once, passive, enabled]);
 }

@@ -85,6 +85,7 @@ describe('StrictMode', () => {
     );
 
     expect(setSearch).not.toHaveBeenCalled();
+    expect(mocks.replace).toHaveBeenCalledTimes(1);
     expect(mocks.replace).toHaveBeenCalledWith('/items?a=1', { scroll: false });
   });
 });

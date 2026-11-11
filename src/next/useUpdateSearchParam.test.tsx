@@ -59,3 +59,38 @@ describe('useUpdateSearchParam', () => {
     expect(mocks.replace).toHaveBeenCalledWith('/items?search=a', { scroll: false });
   });
 });
+
+describe('useUpdateSearchParam: trim', () => {
+  afterEach(async () => {
+    await Promise.resolve();
+  });
+
+  it('does not navigate when only surrounding whitespace changes', () => {
+    setUrl('search=ana');
+    const { result } = renderHook(() => useUpdateSearchParam({ trim: true }));
+
+    result.current('ana ');
+
+    expect(mocks.replace).not.toHaveBeenCalled();
+  });
+
+  it('removes the param for whitespace-only and missing values', () => {
+    setUrl('search=ana');
+    const { result } = renderHook(() => useUpdateSearchParam({ trim: true }));
+
+    result.current('   ');
+    expect(mocks.replace).toHaveBeenLastCalledWith('/items', { scroll: false });
+
+    result.current();
+    expect(mocks.replace).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps whitespace by default', () => {
+    setUrl('search=ana');
+    const { result } = renderHook(() => useUpdateSearchParam());
+
+    result.current('ana ');
+
+    expect(mocks.replace).toHaveBeenCalledWith('/items?search=ana+', { scroll: false });
+  });
+});

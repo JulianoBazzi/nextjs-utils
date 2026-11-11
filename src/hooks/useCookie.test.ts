@@ -223,3 +223,68 @@ describe('useCookie', () => {
     expect(result.current[0]).toBe('dark');
   });
 });
+
+describe('useCookie: expiration, secure and cross-tab sync', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('writes maxAge in seconds, taking precedence over days', () => {
+    const writes = cookieWrites();
+    const { result } = renderHook(() => useCookie('theme', 'light', { maxAge: 60, days: 7 }));
+
+    act(() => result.current[1]('dark'));
+
+    expect(writes[0]).toContain('; max-age=60');
+  });
+
+  it("sets secure only on HTTPS pages with secure: 'auto'", () => {
+    const writes = cookieWrites();
+    const { result } = renderHook(() => useCookie('theme', 'light', { secure: 'auto' }));
+
+    act(() => result.current[1]('dark'));
+
+    // jsdom serves the page over http://.
+    expect(window.location.protocol).toBe('http:');
+    expect(writes[0]).not.toContain('secure');
+  });
+
+  it('re-reads the cookie when the tab regains focus or visibility', () => {
+    const { result } = renderHook(() => useCookie('theme', 'light'));
+
+    // Written by another tab: no same-tab event.
+    clearCookie('theme');
+    // biome-ignore lint/suspicious/noDocumentCookie: simulates a write from another tab
+    document.cookie = `theme=${encodeURIComponent('"dark"')}; path=/`;
+    expect(result.current[0]).toBe('light');
+
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+    expect(result.current[0]).toBe('dark');
+
+    // biome-ignore lint/suspicious/noDocumentCookie: simulates a write from another tab
+    document.cookie = `theme=${encodeURIComponent('"blue"')}; path=/`;
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(result.current[0]).toBe('blue');
+  });
+
+  it('re-reads the cookie on Cookie Store change events', () => {
+    const cookieStore = new EventTarget();
+    vi.stubGlobal('cookieStore', cookieStore);
+    const { result, unmount } = renderHook(() => useCookie('theme', 'light'));
+
+    // biome-ignore lint/suspicious/noDocumentCookie: simulates a write from another tab
+    document.cookie = `theme=${encodeURIComponent('"dark"')}; path=/`;
+    act(() => {
+      cookieStore.dispatchEvent(new Event('change'));
+    });
+    expect(result.current[0]).toBe('dark');
+
+    const remove = vi.spyOn(cookieStore, 'removeEventListener');
+    unmount();
+    expect(remove).toHaveBeenCalledWith('change', expect.any(Function));
+  });
+});

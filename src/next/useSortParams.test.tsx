@@ -1,5 +1,6 @@
 import { renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { usePaginationParams } from './usePaginationParams';
 import { useSortParams } from './useSortParams';
 
 const mocks = vi.hoisted(() => ({
@@ -122,5 +123,56 @@ describe('useSortParams', () => {
     const { result } = renderHook(() => useSortParams());
     result.current.toggleSort('');
     expect(mocks.replace).not.toHaveBeenCalled();
+  });
+});
+
+describe('useSortParams: resetKeys and composition', () => {
+  afterEach(async () => {
+    await Promise.resolve();
+  });
+
+  it('deletes resetKeys in the same navigation as the sort change', () => {
+    setUrl('page=3');
+    const { result } = renderHook(() => useSortParams({ resetKeys: ['page'] }));
+
+    result.current.toggleSort('name');
+
+    expect(mocks.replace).toHaveBeenCalledTimes(1);
+    expect(mocks.replace).toHaveBeenCalledWith('/items?sortBy=name&order=asc', { scroll: false });
+  });
+
+  it('deletes resetKeys when flipping and clearing the sort', async () => {
+    setUrl('sortBy=name&order=asc&page=3');
+    const { result } = renderHook(() => useSortParams({ resetKeys: ['page'] }));
+
+    result.current.toggleSort('name');
+    expect(mocks.replace).toHaveBeenLastCalledWith('/items?sortBy=name&order=desc', {
+      scroll: false,
+    });
+    await Promise.resolve();
+
+    setUrl('sortBy=name&order=desc&page=3');
+    const { result: next } = renderHook(() => useSortParams({ resetKeys: ['page'] }));
+    next.current.toggleSort('name');
+    expect(mocks.replace).toHaveBeenLastCalledWith('/items', { scroll: false });
+    await Promise.resolve();
+
+    next.current.clearSort();
+    expect(mocks.replace).toHaveBeenLastCalledWith('/items', { scroll: false });
+  });
+
+  it('composes with a page change from another hook in the same handler', () => {
+    setUrl('page=3');
+    const { result } = renderHook(() => ({
+      sort: useSortParams(),
+      pagination: usePaginationParams(),
+    }));
+
+    result.current.sort.toggleSort('name');
+    result.current.pagination.setPage(1);
+
+    expect(mocks.replace).toHaveBeenLastCalledWith('/items?sortBy=name&order=asc', {
+      scroll: false,
+    });
   });
 });

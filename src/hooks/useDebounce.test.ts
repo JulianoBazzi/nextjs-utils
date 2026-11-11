@@ -146,3 +146,73 @@ describe('useDebounce', () => {
     });
   });
 });
+
+describe('useDebounce options', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('runs the pending call on unmount with flushOnUnmount', () => {
+    const fn = vi.fn();
+    const { result, unmount } = renderHook(() => useDebounce(fn, 500, { flushOnUnmount: true }));
+
+    act(() => result.current('draft'));
+    unmount();
+
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fn).toHaveBeenCalledWith('draft');
+  });
+
+  it('drops the pending call on unmount by default', () => {
+    const fn = vi.fn();
+    const { result, unmount } = renderHook(() => useDebounce(fn, 500));
+
+    act(() => result.current('draft'));
+    unmount();
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it('does nothing on unmount when no call is pending', () => {
+    const fn = vi.fn();
+    const { unmount } = renderHook(() => useDebounce(fn, 500, { flushOnUnmount: true }));
+
+    unmount();
+
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it('calls onChange when the debounced value changes, never for the initial value', () => {
+    const onChange = vi.fn();
+    const { rerender } = renderHook(({ value }) => useDebounce(value, 500, { onChange }), {
+      initialProps: { value: 'a' },
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(onChange).not.toHaveBeenCalled();
+
+    rerender({ value: 'b' });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith('b');
+
+    // Back and forth within the delay settles on the same value: no call.
+    rerender({ value: 'c' });
+    rerender({ value: 'b' });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+});

@@ -1,4 +1,3 @@
-import { useSearchParams } from 'next/navigation';
 import { useCallback } from 'react';
 import { type QueryParams, useUpdateQueryParams } from './useUpdateQueryParams';
 
@@ -11,28 +10,29 @@ export interface UpdateSearchParamOptions {
   scroll?: boolean;
   /** Update the URL without a server round-trip. See `useUpdateQueryParams`. Default `false`. */
   shallow?: boolean;
+  /**
+   * Trim the value before writing it, so `'ana '` after `'ana'` is a no-op and
+   * a whitespace-only value removes the param. Default `false`.
+   */
+  trim?: boolean;
 }
 
 /**
- * Update a single URL search param (Next.js App Router). Convenience wrapper
- * over {@link useUpdateQueryParams}. Empty values remove the param, and a value
- * equal to the current one is a no-op (avoids a redundant navigation).
+ * Update a single URL search param (Next.js App and Pages Router). Convenience
+ * wrapper over {@link useUpdateQueryParams}. Empty values remove the param, and
+ * a value equal to the current one is a no-op (avoids a redundant navigation).
  */
 export function useUpdateSearchParam(options: UpdateSearchParamOptions = {}) {
-  const { key = 'search', history, scroll, shallow } = options;
-  const searchParams = useSearchParams();
-  const update = useUpdateQueryParams({ history, scroll, shallow });
+  const { key = 'search', history, scroll, shallow, trim = false } = options;
+  // `skipUnchanged` makes an equal value a no-op, while still collapsing
+  // duplicated entries (`?search=a&search=a`) into one.
+  const update = useUpdateQueryParams({ history, scroll, shallow, skipUnchanged: true });
 
   return useCallback(
     (value?: string) => {
-      const next = value || undefined;
-      const current = searchParams.getAll(key);
-      // No-op only when the URL holds exactly this single value (duplicates get cleaned up).
-      if (current.length <= 1 && current[0] === next) {
-        return;
-      }
-      update({ [key]: next } as Partial<QueryParams>);
+      const next = trim ? value?.trim() : value;
+      update({ [key]: next || undefined } as Partial<QueryParams>);
     },
-    [key, update, searchParams],
+    [key, trim, update],
   );
 }

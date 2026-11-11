@@ -152,3 +152,24 @@ describe('useEventListener', () => {
     expect(add).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('useEventListener: enabled', () => {
+  it('attaches nothing while disabled and attaches once enabled', () => {
+    const handler = vi.fn();
+    const { rerender } = renderHook(
+      ({ enabled }) => useEventListener('click', handler, undefined, { enabled }),
+      { initialProps: { enabled: false } },
+    );
+
+    window.dispatchEvent(new Event('click'));
+    expect(handler).not.toHaveBeenCalled();
+
+    rerender({ enabled: true });
+    window.dispatchEvent(new Event('click'));
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    rerender({ enabled: false });
+    window.dispatchEvent(new Event('click'));
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+});

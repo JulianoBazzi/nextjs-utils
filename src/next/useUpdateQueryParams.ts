@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { buildQuery } from './internal/query';
-import { useQueryNavigation } from './internal/useQueryNavigation';
+import { useQueryNavigation, useStableList } from './internal/useQueryNavigation';
 
 export type QueryParamValue =
   | string
@@ -57,9 +57,8 @@ export function useUpdateQueryParams<T extends object = QueryParams>(
     preserveHash = false,
   } = options;
   const { navigate } = useQueryNavigation();
-  // Stable primitive so an inline `ignoredParams` array doesn't recreate the callback.
-  const ignoredKey = JSON.stringify(ignoredParams.map(String));
-  const ignored = useMemo(() => new Set<string>(JSON.parse(ignoredKey)), [ignoredKey]);
+  const ignoredList = useStableList(ignoredParams);
+  const ignored = useMemo(() => new Set(ignoredList), [ignoredList]);
 
   return useCallback(
     (params?: Partial<T>) => {

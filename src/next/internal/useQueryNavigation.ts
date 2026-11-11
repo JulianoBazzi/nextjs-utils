@@ -1,8 +1,22 @@
 import { useRouter as usePagesRouter } from 'next/compat/router';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { recordPending, resolveBase } from './pending';
 import { isSameQuery, splitAsPath, withQuery } from './query';
+
+/**
+ * A list of keys memoized by content, so an inline array (`ignoredParams`,
+ * `resetKeys`) doesn't change identity — and re-create callbacks — every render.
+ */
+export function useStableList(list: readonly unknown[]): string[] {
+  const key = JSON.stringify(list.map(String));
+  return useMemo(() => JSON.parse(key) as string[], [key]);
+}
+
+/** `{ key: undefined }` for every key, i.e. a patch that deletes them all. */
+export function deletionsOf(keys: readonly string[]): Record<string, undefined> {
+  return Object.fromEntries(keys.map((key) => [key, undefined]));
+}
 
 export interface NavigateOptions {
   history: 'push' | 'replace';
