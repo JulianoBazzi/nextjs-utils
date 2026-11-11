@@ -9,6 +9,8 @@ export interface UpdateSearchParamOptions {
   history?: 'push' | 'replace';
   /** Scroll to top after navigation. Default `false`. */
   scroll?: boolean;
+  /** Update the URL without a server round-trip. See `useUpdateQueryParams`. Default `false`. */
+  shallow?: boolean;
 }
 
 /**
@@ -17,9 +19,9 @@ export interface UpdateSearchParamOptions {
  * equal to the current one is a no-op (avoids a redundant navigation).
  */
 export function useUpdateSearchParam(options: UpdateSearchParamOptions = {}) {
-  const { key = 'search', history, scroll } = options;
+  const { key = 'search', history, scroll, shallow } = options;
   const searchParams = useSearchParams();
-  const update = useUpdateQueryParams({ history, scroll });
+  const update = useUpdateQueryParams({ history, scroll, shallow });
 
   return useCallback(
     (value?: string) => {

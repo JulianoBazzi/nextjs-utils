@@ -23,6 +23,8 @@ export interface UseSortParamsOptions {
   history?: 'push' | 'replace';
   /** Scroll to top after navigation. Default `false`. */
   scroll?: boolean;
+  /** Update the URL without a server round-trip. See `useUpdateQueryParams`. Default `false`. */
+  shallow?: boolean;
 }
 
 export interface UseSortParamsReturn {
@@ -51,10 +53,11 @@ export function useSortParams(options: UseSortParamsOptions = {}): UseSortParams
     allowedSorts,
     history,
     scroll,
+    shallow,
   } = options;
 
   const searchParams = useSearchParams();
-  const updateQueryParams = useUpdateQueryParams({ history, scroll });
+  const updateQueryParams = useUpdateQueryParams({ history, scroll, shallow });
 
   const isAllowed = useCallback(
     (column: string) =>

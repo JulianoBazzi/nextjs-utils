@@ -1,23 +1,31 @@
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useMemo } from 'react';
+import { buildQuery } from './internal/query';
+import { useQueryNavigation } from './internal/useQueryNavigation';
 
 export type QueryParamValue =
   | string
   | number
   | boolean
+  | Date
   | null
   | undefined
-  | Array<string | number | boolean>;
+  | Array<string | number | boolean | Date>;
 
 export type QueryParams = Record<string, QueryParamValue>;
 
 export interface UpdateQueryParamsOptions<T extends object> {
   /** Keys never written to the URL (e.g. internal-only params). Default `[]`. */
-  ignoredParams?: (keyof T | string)[];
+  ignoredParams?: (keyof T | (string & NonNullable<unknown>))[];
   /** Navigation method. Default `'replace'` (no extra history entry). */
   history?: 'push' | 'replace';
   /** Scroll to top after navigation. Default `false`. */
   scroll?: boolean;
+  /**
+   * Update the URL without re-rendering on the server. Pages Router: shallow
+   * routing (`getServerSideProps` does not run). App Router: the History API
+   * (requires Next 14.1+; `useSearchParams` stays in sync). Default `false`.
+   */
+  shallow?: boolean;
   /**
    * Skip the navigation when the resulting params equal the current ones
    * (order-insensitive). Avoids a redundant RSC round-trip. Default `false`.
@@ -27,24 +35,15 @@ export interface UpdateQueryParamsOptions<T extends object> {
   preserveHash?: boolean;
 }
 
-/** `''`, `null`, `undefined` and non-finite numbers (`NaN`, `Infinity`) delete the param. */
-function isEmpty(value: unknown): boolean {
-  return value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value));
-}
-
-function sameParams(a: URLSearchParams, b: URLSearchParams): boolean {
-  const left = new URLSearchParams(a);
-  const right = new URLSearchParams(b);
-  left.sort();
-  right.sort();
-  return left.toString() === right.toString();
-}
-
 /**
- * Update multiple URL search params from an object (Next.js App Router).
- * Empty values (`''`, `null`, `undefined`, `NaN`, empty arrays) delete the
- * param; array values produce repeated entries. Call with no argument to clear
- * all params and return to the bare pathname.
+ * Update multiple URL search params from an object (Next.js App and Pages
+ * Router). Empty values (`''`, `null`, `undefined`, `NaN`, invalid dates,
+ * empty arrays) delete the param; `false` and `0` are written; dates become
+ * ISO strings; array values produce repeated entries. Call with no argument to
+ * clear all params and return to the bare pathname.
+ *
+ * Consecutive calls in the same tick (from this or other URL hooks) build on
+ * each other. In the Pages Router nothing is written before `router.isReady`.
  */
 export function useUpdateQueryParams<T extends object = QueryParams>(
   options: UpdateQueryParamsOptions<T> = {},
@@ -53,66 +52,25 @@ export function useUpdateQueryParams<T extends object = QueryParams>(
     ignoredParams = [],
     history = 'replace',
     scroll = false,
+    shallow = false,
     skipUnchanged = false,
     preserveHash = false,
   } = options;
-  const router = useRouter();
-  const pathname = usePathname() ?? '';
-  const searchParams = useSearchParams();
+  const { navigate } = useQueryNavigation();
   // Stable primitive so an inline `ignoredParams` array doesn't recreate the callback.
   const ignoredKey = JSON.stringify(ignoredParams.map(String));
   const ignored = useMemo(() => new Set<string>(JSON.parse(ignoredKey)), [ignoredKey]);
 
   return useCallback(
     (params?: Partial<T>) => {
-      const navigate = (url: string) => {
-        const hash = preserveHash && typeof window !== 'undefined' ? window.location.hash : '';
-        const target = `${url}${hash}`;
-        if (history === 'push') {
-          router.push(target, { scroll });
-        } else {
-          router.replace(target, { scroll });
-        }
-      };
-
-      if (!params) {
-        navigate(pathname);
-        return;
-      }
-
-      const current = new URLSearchParams(searchParams.toString());
-
-      for (const [key, value] of Object.entries(params)) {
-        if (ignored.has(key)) {
-          continue;
-        }
-
-        current.delete(key);
-
-        if (isEmpty(value) || (Array.isArray(value) && value.length === 0)) {
-          continue;
-        }
-
-        if (Array.isArray(value)) {
-          for (const item of value) {
-            if (isEmpty(item)) {
-              continue;
-            }
-            current.append(key, String(item));
-          }
-          continue;
-        }
-
-        current.set(key, String(value));
-      }
-
-      if (skipUnchanged && sameParams(current, new URLSearchParams(searchParams.toString()))) {
-        return;
-      }
-
-      const query = current.toString();
-      navigate(query ? `${pathname}?${query}` : pathname);
+      navigate((base) => (params ? buildQuery(base, params, ignored) : new URLSearchParams()), {
+        history,
+        scroll,
+        shallow,
+        skipUnchanged,
+        preserveHash,
+      });
     },
-    [router, pathname, searchParams, ignored, history, scroll, skipUnchanged, preserveHash],
+    [navigate, ignored, history, scroll, shallow, skipUnchanged, preserveHash],
   );
 }

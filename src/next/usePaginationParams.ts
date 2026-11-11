@@ -18,6 +18,8 @@ export interface UsePaginationParamsOptions {
   history?: 'push' | 'replace';
   /** Scroll to top after navigation. Default `false`. */
   scroll?: boolean;
+  /** Update the URL without a server round-trip. See `useUpdateQueryParams`. Default `false`. */
+  shallow?: boolean;
 }
 
 export interface UsePaginationParamsReturn {
@@ -66,10 +68,11 @@ export function usePaginationParams(
     maxPageSize,
     history,
     scroll,
+    shallow,
   } = options;
 
   const searchParams = useSearchParams();
-  const updateQueryParams = useUpdateQueryParams({ history, scroll });
+  const updateQueryParams = useUpdateQueryParams({ history, scroll, shallow });
 
   const page = parsePositiveInt(searchParams.get(pageKey), 1);
   const pageSize = clamp(
