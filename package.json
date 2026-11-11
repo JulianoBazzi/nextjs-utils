@@ -1,7 +1,7 @@
 {
   "name": "@julianobazzi/nextjs-utils",
   "version": "1.2.0",
-  "description": "A collection of reusable hooks and utilities for Next.js (App Router), compatible with React 18 and 19.",
+  "description": "A collection of reusable hooks and utilities for Next.js (App Router and Pages Router), compatible with React 18 and 19.",
   "author": "Juliano Bazzi",
   "license": "MIT",
   "type": "module",
@@ -10,15 +10,26 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./next": {
-      "types": "./dist/next.d.ts",
-      "import": "./dist/next.js",
-      "require": "./dist/next.cjs"
-    }
+      "import": {
+        "types": "./dist/next.d.ts",
+        "default": "./dist/next.js"
+      },
+      "require": {
+        "types": "./dist/next.d.cts",
+        "default": "./dist/next.cjs"
+      }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
@@ -27,10 +38,14 @@
     "llms.txt"
   ],
   "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
   "keywords": [
     "nextjs",
     "next",
     "app-router",
+    "pages-router",
     "react",
     "hooks",
     "nextjs-utils",
@@ -54,14 +69,20 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "release": "pnpm publish",
-    "prepublishOnly": "pnpm build"
+    "prepublishOnly": "pnpm build",
+    "check:exports": "attw --pack . --profile node16"
   },
   "peerDependencies": {
     "next": ">=14.0.0",
-    "react": ">=18.0.0",
-    "react-dom": ">=18.0.0"
+    "react": "^18.0.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "next": {
+      "optional": true
+    }
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.5",
     "@biomejs/biome": "2.5.9",
     "@changesets/cli": "2.31.1",
     "@testing-library/dom": "10.4.1",

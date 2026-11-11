@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { defineConfig } from 'tsup';
 
-const CLIENT_BUNDLES = ['dist/index.js', 'dist/index.cjs', 'dist/next.js', 'dist/next.cjs'];
+const BUNDLES = ['dist/index.js', 'dist/index.cjs', 'dist/next.js', 'dist/next.cjs'];
 // `from 'next/navigation'` / `require("next/compat/router")` (no extension yet).
 const NEXT_SPECIFIER = /((?:from\s*|require\()['"])(next\/(?:navigation|compat\/router))(['"])/g;
 // Any `next/*` import or require still lacking a `.js` extension after the rewrite.
@@ -13,32 +13,34 @@ export default defineConfig({
   dts: true,
   clean: true,
   // Keep each entry self-contained so `next/navigation` lives only in the
-  // `next` bundle and `'use client'` can be prepended to every emitted file.
+  // `next` bundle.
   splitting: false,
-  treeshake: true,
+  // esbuild already drops unused code; tsup's extra Rollup tree-shaking pass
+  // would strip the `'use client'` banner and duplicate `sourceMappingURL`.
+  // Consumers tree-shake further (`sideEffects: false`).
+  treeshake: false,
   sourcemap: true,
   minify: false,
   external: ['react', 'react-dom', 'next'],
   cjsInterop: true,
-  // Two post-build rewrites on the emitted bundles:
-  // 1. esbuild strips module-level `'use client'` while bundling; prepend it back
-  //    so the directive survives for Next.js App Router consumers.
-  // 2. `next` ships no `exports` field, so native Node ESM (used by `next build`
-  //    page-data collection) can't resolve extensionless bare specifiers such
-  //    as `next/navigation`. Rewrite them to the real files (`next/navigation.js`,
-  //    `next/compat/router.js`), resolvable by both native Node ESM and Next's
-  //    bundler. Source keeps the bare form so TS types keep resolving.
+  // esbuild strips module-level `'use client'` while bundling; the banner puts
+  // it back as the first statement of every bundle, with sourcemaps aligned.
+  banner: { js: "'use client';" },
+  // `next` ships no `exports` field, so native Node ESM (used by `next build`
+  // page-data collection) can't resolve extensionless bare specifiers such as
+  // `next/navigation`. Rewrite them to the real files (`next/navigation.js`,
+  // `next/compat/router.js`), resolvable by both native Node ESM and Next's
+  // bundler. Source keeps the bare form so TS types keep resolving. Adding
+  // `.js` inside an import string never moves code to another line, so the
+  // sourcemaps stay valid.
   async onSuccess() {
     await Promise.all(
-      CLIENT_BUNDLES.map(async (file) => {
+      BUNDLES.map(async (file) => {
         let code = await fs.readFile(file, 'utf8');
         code = code.replace(NEXT_SPECIFIER, '$1$2.js$3');
         const leftover = code.match(UNREWRITTEN_NEXT_SPECIFIER);
         if (leftover) {
           throw new Error(`${file}: unrewritten Next.js import ${leftover[0]}`);
-        }
-        if (!code.startsWith("'use client'")) {
-          code = `'use client';\n${code}`;
         }
         await fs.writeFile(file, code);
       }),
