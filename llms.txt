@@ -1,22 +1,21 @@
 # @julianobazzi/nextjs-utils
 
-> A collection of reusable hooks and utilities for Next.js (App Router), written
-> in TypeScript. Built for Next.js, compatible with React 18 and 19. Client hooks
-> ship with the `'use client'` directive applied at the bundle entry, so they can be
-> imported directly into Server Components. `next`, `react`, `react-dom` are peer
-> dependencies. Ships as ESM + CJS with TypeScript declarations.
+> A collection of reusable hooks and utilities for Next.js (App Router and Pages
+> Router), written in TypeScript. Built for Next.js, compatible with React 18 and 19.
+> Client hooks ship with the `'use client'` directive applied at the bundle entry,
+> so they can be imported directly into Server Components. Peer deps: react
+> (^18 || ^19) and next (>=14, optional for root-entry-only use). Ships as ESM + CJS,
+> each with its own TypeScript declarations.
 
 Two entry points:
-- Root `@julianobazzi/nextjs-utils` — core React hooks + utilities (no `next/navigation`).
-- Subpath `@julianobazzi/nextjs-utils/next` — the `next/navigation`-backed hooks
-  (`useSearchParam`, `useUpdateQueryParams`, `useUpdateSearchParam`, `useFilterQueryParams`,
-  `useActiveRoute`, `usePaginationParams`, `useSortParams`, `useHashParam`).
-Keeping `next/navigation` out of the root entry lets server-evaluated modules (e.g.
-`next build` page-data collection) import core hooks without an `ERR_MODULE_NOT_FOUND`.
+- Root `@julianobazzi/nextjs-utils` — core React hooks + utilities (never imports `next`).
+- Subpath `@julianobazzi/nextjs-utils/next` — the Next.js router hooks.
+Keeping `next` out of the root entry lets server-evaluated modules (e.g. `next build`
+page-data collection) import core hooks without an `ERR_MODULE_NOT_FOUND`.
 `import { useToggle } from '@julianobazzi/nextjs-utils'`
 `import { useSearchParam } from '@julianobazzi/nextjs-utils/next'`
 
-## Hooks
+## Hooks (root entry)
 
 - useToggle(initialValue = false): [value: boolean, toggle: () => void, set: (value?: boolean) => void]
   — Boolean state. `toggle()` flips it; `set(v)` assigns a value, `set()` flips.
@@ -24,124 +23,182 @@ Keeping `next/navigation` out of the root entry lets server-evaluated modules (e
 - usePrevious<T>(value: T): T | undefined
   — Returns the value held on the previous render; `undefined` on first render.
 
-- useDebounce<T>(value: T, delay = 500): T
-- useDebounce<F extends (...args: any[]) => any>(fn: F, delay = 500): (...args: Parameters<F>) => void
-  — Overloaded. Value form returns a debounced copy of `value` that updates after
-    `delay` ms of stillness. Function form returns a stable debounced callback that
-    runs the latest `fn` after `delay` ms of inactivity (cancelled on unmount).
+- useDebounce<T>(value: T, delay = 500, options?: { onChange?: (value: T) => void }): T
+- useDebounce<F extends (...args: any[]) => any>(fn: F, delay = 500, options?: { flushOnUnmount? }): DebouncedFunction<Parameters<F>>
+  — Overloaded. Value form returns a debounced copy of `value`; `onChange` fires
+    when the debounced value changes (never for the initial value). Function form
+    returns a stable debounced callback with `.cancel()` and `.flush()`; the pending
+    call is dropped on unmount, or run with `flushOnUnmount: true`.
 
 - useThrottle<T>(value: T, delay = 500): T
-- useThrottle<F extends (...args: any[]) => any>(fn: F, delay = 500): (...args: Parameters<F>) => void
+- useThrottle<F extends (...args: any[]) => any>(fn: F, delay = 500, options?: { flushOnUnmount? }): ThrottledFunction<Parameters<F>>
   — Overloaded, mirrors useDebounce. Value form updates at most once per `delay` ms,
     settling on the latest value. Function form invokes on the leading edge, then
     collapses calls made during the wait into one trailing call with the latest
-    args (cancelled on unmount).
+    args; exposes `.cancel()`/`.flush()`.
 
-- useLocalStorage<T>(key: string, initialValue: T): [value: T, setValue: (v: T | ((prev: T) => T)) => void, remove: () => void]
-  — State persisted in localStorage, JSON-serialized, synced across components and
-    tabs via the `storage` event. SSR-safe (returns `initialValue` without `window`).
+- useLocalStorage<T>(key: string, initialValue: T, options?: { serializer?, deserializer?, onError? }): [value: T, setValue: (v: T | ((prev: T) => T)) => void, remove: () => void]
+  — State persisted in localStorage (JSON by default), synced across components and
+    tabs. Parsed values keep their identity until the stored string changes. Never
+    throws: unavailable/full storage or bad data falls back to `initialValue` and
+    reports through `onError`. SSR-safe.
 
-- useCookie<T = string>(name: string, initialValue: T, options?: { days?, path?='/', sameSite?='lax', secure? }): [value, setValue, remove]
-  — Same API as useLocalStorage, backed by document.cookie (JSON-serialized,
-    URI-encoded), synced across components in the same tab. Session cookie unless
-    `days` is set. SSR-safe; for server-side reads use next/headers cookies().
+- useCookie<T = string>(name: string, initialValue: T, options?: { days?, maxAge?, path?='/', domain?, sameSite?='lax', secure?: boolean | 'auto', serializer?, deserializer? }): [value, setValue, remove]
+  — Like useLocalStorage, backed by document.cookie (JSON-serialized, URI-encoded).
+    Synced across components in the same tab; changes from other tabs/the server are
+    picked up via Cookie Store `change` events or on focus/visibility. Session cookie
+    unless `days`/`maxAge` (seconds, wins) is set. `secure: 'auto'` = only on HTTPS.
+    Use `deserializer: (raw) => raw` for plain-text cookies. SSR-safe; never HttpOnly.
 
-- useMediaQuery(query: string): boolean
-  — Reactively tracks a CSS media query (e.g. '(min-width: 768px)') via
-    window.matchMedia and useSyncExternalStore. Returns `false` on the server.
+- useMediaQuery(query: string, options?: { defaultValue?: boolean = false }): boolean
+  — Reactively tracks a CSS media query via matchMedia + useSyncExternalStore.
+    Returns `defaultValue` on the server, during hydration and without matchMedia.
 
-- useEventListener(eventName, handler, element?): void
-  — Attaches a typed event listener to window (default), a DOM element, or a ref,
-    with automatic cleanup. The handler is stored in a ref, so it need not be stable.
+- useEventListener(eventName, handler, target?, options?: boolean | { capture?, once?, passive?, enabled?=true }): void
+  — Typed listener on window (default), document, an element, a ref, or any
+    EventTarget, with cleanup. Handler kept in a ref. `enabled: false` detaches.
+    An explicit `null` target falls back to window; a ref `{ current: null }` attaches nothing.
 
 - useInterval(callback: () => void, delay: number | null): void
   — Runs `callback` every `delay` ms using the latest callback without resetting
     the timer. Pass `delay = null` to pause; clears on unmount.
 
 - useOnlineStatus(): boolean
-  — Tracks browser connectivity via the online/offline events and
-    useSyncExternalStore. Returns `true` on the server.
+  — Tracks browser connectivity via online/offline events. `true` on the server.
 
 - usePageVisibility(): boolean
-  — Tracks document.visibilityState via the visibilitychange event. `true` while
-    the tab is visible; `true` on the server. Useful to pause polling/media.
+  — Tracks document.visibilityState. `true` while visible; `true` on the server.
 
 - useIdle(timeout = 60000): boolean
   — `true` after `timeout` ms without user activity (mouse, keyboard, wheel,
-    scroll, touch; activity bursts are coalesced). Resets to `false` on activity.
-    Returns `false` on the server.
+    scroll, touch). Resets to `false` on activity. `false` on the server.
 
 - useBeforeUnload(enabled: boolean, message?: string): void
-  — Registers a beforeunload confirmation while `enabled` (e.g. unsaved changes).
-    Most browsers show a generic dialog and ignore `message`. Client-side route
-    changes (next/link) do not fire beforeunload.
+  — beforeunload confirmation while `enabled`. Client-side route changes do not fire it.
 
-- useBroadcastChannel<T>(channelName: string, onMessage?: (data: T) => void): { postMessage: (data: T) => void }
-  — Cross-tab messaging via BroadcastChannel. Messages go to other tabs only;
-    the channel closes on unmount; the latest onMessage is always used. No-op
-    on the server and in browsers without BroadcastChannel.
+- useBroadcastChannel<T>(channelName: string, onMessage?: (data: T) => void, options?: { validate?: (data: unknown) => data is T, onError? }): { postMessage: (data: T) => void }
+  — Cross-tab messaging via BroadcastChannel; closes on unmount. `validate` drops
+    messages that fail the type guard. No-op on the server / without support.
 
-- useHistoryState<T>(initialValue: T, options?: { capacity?=100 }): { state, set, undo, redo, canUndo, canRedo, clear }
-  — State with undo/redo. `set` (value or updater) pushes onto a bounded undo
-    stack and clears redo; setting an identical value (Object.is) records nothing;
-    `clear` drops history keeping the current state.
+- useHistoryState<T>(initialValue: T, options?: { capacity?=100 }): { state, set, undo, redo, canUndo, canRedo, clear, reset }
+  — State with undo/redo. `set` (value or updater) pushes onto a bounded undo stack
+    and clears redo; identical values record nothing. `clear()` drops history,
+    keeping the state; `reset(value?)` drops history and sets the state
+    (`initialValue` when omitted).
+
+- useLatestRequest(): { start: () => { signal: AbortSignal; isCurrent: () => boolean }; cancel: () => void }
+  — Keeps only the latest of overlapping async requests: `start()` aborts the
+    previous one; check `isCurrent()` before setting state. Aborts on unmount.
+
+- useDistinctTrigger<T>(options?: { isEqual? }): { shouldRun(value: T): boolean; remember(value?: T): void; reset(): void }
+  — Run a lookup only for new values: `shouldRun` is false for the remembered
+    value; `remember()` without args stores the last checked value.
+
+- useInfiniteScroll({ onLoadMore, hasMore, enabled?=true, root?, rootMargin?='200px' }): { sentinelRef }
+  — IntersectionObserver on a sentinel element; calls `onLoadMore` when visible.
+    Pass `enabled: !isLoading`. No-op without IntersectionObserver.
+
+- useRefreshKey(): [key: number, refresh: () => void]
+  — Counter for a React `key`; `refresh()` remounts the subtree.
+
+- useServiceWorkerUpdate(onUpdate: () => void): void
+  — Calls `onUpdate` on service worker `controllerchange`, ignoring the first
+    install on a page that had no controller. No-op without support.
+
+- useReloadWhen(options?: { canReload?: () => boolean, retryMs?=1000, reload? }): { requestReload(): void }
+  — Reloads (default: full page reload) as soon as `canReload()` allows; a request
+    made while unsafe is retried every `retryMs`, not dropped.
+
+- useDailyAt(hour: number, minute: number, callback: () => void): void
+  — Runs `callback` every day at hour:minute local time; re-checks on
+    visibilitychange so a run missed while asleep fires once.
 
 - createCan<T>(useCurrentRoles: () => T | T[] | null | undefined): { useCan, Can }
-  — Auth-agnostic role-based access control factory. `useCan(allowed?: T[]): boolean`
-    and `Can({ allowed?, children, fallback? })` share the resolver. Unauthenticated
-    (resolver -> null/undefined) is denied; empty/omitted `allowed` grants any
-    authenticated user; otherwise granted if any current role is in `allowed`.
+  — Auth-agnostic role-based UI gating. `useCan(allowed?: T[]): boolean` and
+    `Can({ allowed?, children, fallback? })`. Unauthenticated is denied; empty/omitted
+    `allowed` grants any authenticated user; otherwise granted if any role is in
+    `allowed`. UI only — enforce permissions on the server.
 
-## Utilities (non-hook, src/utils/)
+## Utilities (root entry)
 
-- allowNumericKeyDown(event: KeyboardEvent<HTMLInputElement>, options?: { allowDecimal?: boolean; allowNegative?: boolean }): void
-  — onKeyDown handler restricting an input to digits via preventDefault. Control,
-    navigation, and modifier-shortcut keys pass through. Options allow '.'/',' and '-'.
+- allowNumericBeforeInput(event: { data?, currentTarget, preventDefault }, options?: { allowDecimal?, allowNegative? }): boolean
+  — beforeinput handler: prevents insertions whose resulting value is not numeric
+    (one '.'/',' separator with allowDecimal, '-' only at the start with
+    allowNegative). Covers virtual keyboards, paste and drop. Use type="text".
 
-## Next.js utilities (src/next/)
+- allowNumericKeyDown(event: KeyboardEvent<HTMLInputElement>, options?: { allowDecimal?, allowNegative? }): boolean
+  — onKeyDown handler restricting typing to digits. Physical keyboards only
+    (Android virtual keyboards, paste, autofill bypass it). Returns whether allowed.
+
+## Next.js hooks (subpath /next)
+
+URL write rules (useUpdateQueryParams and every hook built on it):
+- Works in the App Router and the Pages Router (detected via next/compat/router).
+  Pages Router: reads asPath, writes nothing before router.isReady.
+- Shared options: history ('replace' | 'push', default 'replace'), scroll (false),
+  shallow (false). `shallow: true` avoids the server round-trip: Pages Router
+  shallow routing (no getServerSideProps), App Router History API (Next 14.1+).
+- Calls in the same tick compose (e.g. toggleSort + setPage from different hooks).
+- '', null, undefined, NaN/Infinity, invalid Date and [] delete a param; false and 0
+  are written; Date -> ISO string; arrays -> repeated entries.
+- In the App Router, hooks calling useSearchParams need <Suspense> on static routes.
 
 - useSearchParam(key: string, defaultValue?: string): string | null
-  — Typed wrapper around next/navigation's useSearchParams; reads one query param.
-    With a defaultValue returns string; otherwise string | null. Client-only.
+  — Reads one query param. With a defaultValue returns string.
 
-- useUpdateQueryParams<T>(options?: { ignoredParams?, history?: 'push'|'replace', scroll? }): (params?: Partial<T>) => void
-  — Writes multiple URL search params from an object. Empty values ('', null,
-    undefined, []) delete the key; arrays append repeated entries; no argument
-    clears all params. Default history 'replace', scroll false. ignoredParams
-    defaults to [] (no app-specific defaults).
+- useSearchParamState<T = string | undefined>(key: string, options?: { parse?: (raw: string | null) => T, serialize?: (value: T) => string | null | undefined, history?, scroll?, shallow? }): [T, (value: T | ((prev: T) => T)) => void]
+  — useState backed by one URL param. Equal values are no-ops; keeps the #hash;
+    functional updates see pending same-tick changes.
 
-- useUpdateSearchParam(options?: { key?='search', history?, scroll? }): (value?: string) => void
-  — Convenience over useUpdateQueryParams for one param. Empty value removes it;
-    a value equal to the current URL value is a no-op.
+- useUpdateQueryParams<T>(options?: { ignoredParams?, history?, scroll?, shallow?, skipUnchanged?=false, preserveHash?=false }): (params?: Partial<T>) => void
+  — Writes multiple params from an object. No argument clears all params (and the
+    hash unless preserveHash). skipUnchanged skips navigations that change nothing.
 
-- useFilterQueryParams<T>({ parameters, deps, search?, setSearch?, initialSearch?, ignoredParams?, overrides? }): { handleSearch }
-  — Syncs a filter form's state to the URL: re-syncs on [deps, search], seeds the
-    search term from initialSearch, returns a handleSearch(value?) setter.
+- useUpdateSearchParam(options?: { key?='search', history?, scroll?, shallow?, trim?=false }): (value?: string) => void
+  — One param. Empty value removes it; an unchanged value never navigates.
+
+- useFilterQueryParams<T>({ parameters, deps, search?, setSearch?, initialSearch?: string | null, searchKey?='search', ignoredParams?, overrides?, resetKeys?, history?, scroll?, shallow?, preserveHash? }): { handleSearch(value?: string): void }
+  — Syncs a filter form's state to the URL on [deps, search], skipping syncs that
+    change nothing. The first sync waits for the initialSearch seed (one navigation
+    on mount) and for Pages Router isReady. searchKey is only written when the hook
+    manages a search. resetKeys are deleted when deps/search change after the first sync.
+
+- usePaginationParams(options?: { pageKey?='page', pageSizeKey?='pageSize', defaultPageSize?=10, maxPageSize?, lastPage?, history?, scroll?, shallow? }): { page, pageSize, setPage, setPageSize, reset }
+  — Pagination in the URL; defaults stay out of the URL; setPageSize resets to
+    page 1; maxPageSize/lastPage clamp; invalid params fall back to defaults.
+
+- useSortParams(options?: { sortKey?='sortBy', orderKey?='order', defaultSort?, defaultOrder?='asc', allowedSorts?, resetKeys?, history?, scroll?, shallow? }): { sortBy, order, toggleSort, clearSort }
+  — Sorting in the URL. toggleSort cycles unsorted -> defaultOrder -> flipped ->
+    unsorted (with defaultSort it falls back to that column). allowedSorts rejects
+    other columns. resetKeys are deleted in the same navigation.
 
 - useActiveRoute(href: string, options?: { exact? }): boolean
-  — `true` when the current pathname (usePathname) matches `href`. Matches whole
-    path segments by default ('/settings' is active on '/settings/profile' but not
-    '/settings-old'); root '/' only matches exactly. Ignores query/hash in href.
+  — Whether the pathname matches href by whole segments; root '/' only exactly.
 
-- usePaginationParams(options?: { pageKey?='page', pageSizeKey?='pageSize', defaultPageSize?=10, history?, scroll? }): { page, pageSize, setPage, setPageSize, reset }
-  — Pagination state in the URL. Defaults stay out of the URL (page 1 and the
-    default page size delete their params); setPageSize resets to page 1; invalid
-    params fall back to defaults.
+- useHashParam(defaultValue?: string): [value: string | undefined, setValue: (value?: string, options?: { history?: 'push' | 'replace' }) => void]
+  — Reads/writes the '#hash' without a Next.js navigation. Setting pushes by default
+    (location.hash); clearing replaces by default. SSR-safe.
 
-- useSortParams(options?: { sortKey?='sortBy', orderKey?='order', defaultSort?, defaultOrder?='asc', history?, scroll? }): { sortBy, order, toggleSort, clearSort }
-  — Table sorting state in the URL. toggleSort(column) cycles unsorted ->
-    defaultOrder -> flipped -> unsorted; switching columns restarts at defaultOrder.
+- createRouteProgress(options?: { ignoreSamePathname?=true }): { onRouterTransitionStart, useRouteProgress(options?: { timeoutMs?=10000, doneMs?=300, ignoreShallow?=true }): 'idle' | 'loading' | 'done' }
+  — Progress-bar state. App Router: export onRouterTransitionStart from
+    instrumentation-client.ts (Next 15.3+); done when the URL commits. Pages Router:
+    follows router.events by itself.
 
-- useHashParam(defaultValue?: string): [value: string | undefined, setValue: (value?: string) => void]
-  — Reads/writes the URL '#hash' fragment via useSyncExternalStore on hashchange
-    (URI-encoded). Setter with no value/'' clears the hash without leaving a
-    dangling '#'. Returns defaultValue when the hash is empty; SSR-safe.
+- useRouterEvent(event: 'routeChangeStart' | 'routeChangeComplete' | 'routeChangeError' | 'beforeHistoryChange' | 'hashChangeStart' | 'hashChangeComplete', handler: (url: string, info: { shallow: boolean; error?: unknown }) => void): void
+  — Pages Router events with cleanup. No-op in the App Router.
+
+- useStaleBuildReload(options?: { guardKey?, minIntervalMs?=10000 }): void
+- isStaleBuildNavigationError(error: unknown): boolean
+  — Reload when code from an outdated build fails to load (ChunkLoadError, failed
+    dynamic imports; Pages Router routeChangeError goes to the target URL). A
+    sessionStorage guard prevents reload loops. Use the predicate in error.tsx.
 
 ## Notes
 
-- Peer deps: next (>=14), react, react-dom (>=18 <20). The library never bundles them.
-- Targets the App Router; client hooks carry the 'use client' directive.
-- Build: tsup. Lint/format: Biome. Tests: Vitest + Testing Library (jsdom).
-- Source layout: src/hooks/ (React hooks), src/utils/ (pure non-hook helpers), src/next/ (Next-specific).
+- Peer deps: react (^18 || ^19), next (>=14, optional). The library never bundles them.
+- Build: tsup. Lint/format: Biome. Tests: Vitest + Testing Library (jsdom), 100% coverage.
+- Source layout: src/hooks/ (React hooks), src/utils/ (non-hook helpers), src/next/ (Next-specific).
+- Pure, non-React helpers (query parsing, server-side cookies, role checks) belong
+  in @julianobazzi/utils, not here.
 - Source: https://github.com/julianobazzi/nextjs-utils
 - Full docs: ./README.md (English) and ./README.pt-br.md (Portuguese).
